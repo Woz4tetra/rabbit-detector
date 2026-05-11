@@ -59,7 +59,7 @@ def main() -> None:
         print(f"  confidence={d.confidence:.2f}  bbox=({d.x1:.0f},{d.y1:.0f})->({d.x2:.0f},{d.y2:.0f})")
 
     # Pi Zero W (ARMv6, single-core, cv2.dnn): expect 15-60s per frame.
-    # Pi Zero 2W (ARMv7, quad-core): expect 2-4s per frame.
+    # Pi Zero W (ARMv7, quad-core): expect 2-4s per frame.
     if elapsed > 30.0:
         print("WARNING: Inference exceeded 30 seconds — alert polling will lag significantly.")
     elif elapsed > 5.0:

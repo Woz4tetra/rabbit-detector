@@ -1,6 +1,6 @@
 # Rabbit Deterrent
 
-Detects rabbits in your garden using a Raspberry Pi Zero 2W and a camera. When a rabbit appears, it plays a deterrent sound and emails you a photo. Runs 24/7 on a 12V battery, day and night.
+Detects rabbits in your garden using a Raspberry Pi Zero W and a camera. When a rabbit appears, it plays a deterrent sound and emails you a photo. Runs 24/7 on a 12V battery, day and night.
 
 - Normal mode: checks for rabbits every 30 seconds
 - Alert mode: checks every 5 seconds until the rabbit leaves, then returns to normal
@@ -14,7 +14,7 @@ Detects rabbits in your garden using a Raspberry Pi Zero 2W and a camera. When a
 
 | Part | Notes |
 |------|-------|
-| Raspberry Pi Zero 2W | Must be the 2W (has WiFi and enough CPU for inference) |
+| Raspberry Pi Zero W | Must be the W (has WiFi and enough CPU for inference) |
 | [Arducam Day-Night Camera (B07X1VGQSL)](https://www.amazon.com/dp/B07X1VGQSL) | OV5647, 5MP, automatic IR-cut filter switching, built-in IR LEDs, M12 lens mount |
 | Pi Zero CSI adapter cable | 22-pin mini to 15-pin standard (Arducam ships a standard cable; you need the Pi Zero variant) |
 | USB speaker | Any USB speaker; connects via micro-USB OTG adapter |
@@ -24,7 +24,7 @@ Detects rabbits in your garden using a Raspberry Pi Zero 2W and a camera. When a
 | IP66 waterproof enclosure with clear lid | e.g., Hammond 1554T2GYCL |
 | Speaker cable gland | Seal the speaker wire entry point |
 
-The Pi Zero 2W has one micro-USB data port. The OTG adapter uses it for the speaker. Do not attach any other USB devices.
+The Pi Zero W has one micro-USB data port. The OTG adapter uses it for the speaker. Do not attach any other USB devices.
 
 ---
 
@@ -94,7 +94,7 @@ You should see a USB audio device in the list. If it is not card index 1, edit `
 bash scripts/install_pi.sh
 ```
 
-This installs system packages, creates a Python virtual environment, and installs the package. It takes a few minutes on the Pi Zero 2W.
+This installs system packages, creates a Python virtual environment, and installs the package. It takes a few minutes on the Pi Zero W.
 
 ### 7. Download the detection model
 
@@ -268,4 +268,4 @@ Lower `detection.confidence_threshold` in `config.yaml` if you're missing rabbit
 | Reduce GPU/CPU frequency | 8-10mA |
 | Disable unused services | 5mA |
 
-With all optimizations applied, the Pi Zero 2W draws roughly 70-80mA at idle. On a 12V 6Ah battery with an 85% efficient buck converter (~12.2Ah available at 5V), expect 150-175 hours, or about 6-7 days. A larger battery or solar panel extends this proportionally.
+With all optimizations applied, the Pi Zero W draws roughly 70-80mA at idle. On a 12V 6Ah battery with an 85% efficient buck converter (~12.2Ah available at 5V), expect 150-175 hours, or about 6-7 days. A larger battery or solar panel extends this proportionally.
