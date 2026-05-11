@@ -60,10 +60,8 @@ def main() -> None:
 
     # Pi Zero W (ARMv6, single-core, cv2.dnn): expect 15-60s per frame.
     # Pi Zero W (ARMv7, quad-core): expect 2-4s per frame.
-    if elapsed > 30.0:
-        print("WARNING: Inference exceeded 30 seconds — alert polling will lag significantly.")
-    elif elapsed > 5.0:
-        print(f"WARNING: Inference took {elapsed:.1f}s — alert polling interval may be exceeded.")
+    if elapsed > 60.0:
+        print(f"WARNING: Inference took {elapsed:.1f}s — significantly above expected range (15-60s).")
 
 
 if __name__ == "__main__":

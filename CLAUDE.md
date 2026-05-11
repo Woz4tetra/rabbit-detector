@@ -127,12 +127,12 @@ All power calls are non-fatal (logged as warnings on failure). The `/boot/firmwa
 
 ## Detection loop timing
 
-| State | Sleep between captures |
-|-------|----------------------|
-| `SCANNING` | 30 seconds |
-| `ALERT` | 5 seconds |
+| State | Sleep | Inference | Effective cycle |
+|-------|-------|-----------|----------------|
+| `SCANNING` | 30s | ~24s | ~54s per check |
+| `ALERT` | none | ~24s | ~24s per check |
 
-The system returns from `ALERT` to `SCANNING` after 3 consecutive frames with no rabbit detected.
+ALERT has no sleep — inference is the bottleneck. The system returns from `ALERT` to `SCANNING` after 3 consecutive clear frames (~72s at 24s/frame).
 
 ## Rabbit deterrent sound research
 

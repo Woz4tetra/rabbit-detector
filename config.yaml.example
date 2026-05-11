@@ -5,7 +5,8 @@ detection:
   capture_width: 640
   capture_height: 480
   # Camera stream frame rate during ALERT state (fps). Also sets the video output fps.
-  frame_rate: 10.0
+  # On Pi Zero W, inference takes ~24s, so >1fps just fills the buffer with unused frames.
+  frame_rate: 1.0
 
 audio:
   # Directory containing .wav files to play as deterrents.
