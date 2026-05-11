@@ -50,8 +50,19 @@ def main() -> None:
         )
     print(f"Dataset downloaded to {dataset.location}")
 
+    # Some roboflow versions download the zip but skip extraction.
+    # Extract manually if data.yaml is missing.
+    dataset_dir = Path(dataset.location)
+    if not (dataset_dir / "data.yaml").exists():
+        zip_path = dataset_dir / "roboflow.zip"
+        if not zip_path.exists():
+            raise SystemExit(f"Neither data.yaml nor roboflow.zip found in {dataset_dir}")
+        print(f"Extracting {zip_path}...")
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(dataset_dir)
+
     # Write the data.yaml pointer used by train.py
-    yaml_src = Path(dataset.location) / "data.yaml"
+    yaml_src = dataset_dir / "data.yaml"
     yaml_dst = TRAINING_DIR / "data.yaml"
     yaml_dst.write_text(yaml_src.read_text())
     print(f"data.yaml written to {yaml_dst}")
