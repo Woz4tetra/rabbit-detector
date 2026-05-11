@@ -2,6 +2,7 @@ config.yaml
 data/models/*.onnx
 data/models/*.pt
 data/logs/
+data/sounds/
 training/runs/
 training/data/
 training/.venv/
