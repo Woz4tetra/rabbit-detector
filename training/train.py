@@ -76,11 +76,19 @@ def main() -> None:
         verbose=True,
     )
 
-    best_pt = Path(results.save_dir) / "weights" / "best.pt"
+    # With DDP, only rank-0 returns a results object; other workers return None.
+    # Use the known save path directly rather than results.save_dir.
+    save_dir = RUNS_DIR / args.name
+    best_pt = save_dir / "weights" / "best.pt"
+    if not best_pt.exists():
+        raise SystemExit(f"Expected best.pt not found at {best_pt}")
+
     OUTPUT_MODEL.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(best_pt, OUTPUT_MODEL)
     print(f"\nBest weights saved to {OUTPUT_MODEL}")
-    print(f"mAP50: {results.results_dict.get('metrics/mAP50(B)', 'N/A'):.4f}")
+
+    if results is not None:
+        print(f"mAP50: {results.results_dict.get('metrics/mAP50(B)', 'N/A'):.4f}")
     print("\nNext step: run training/export_onnx.py")
 
 
