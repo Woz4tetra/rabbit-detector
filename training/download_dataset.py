@@ -27,11 +27,27 @@ def main() -> None:
     if not api_key:
         raise SystemExit("Set ROBOFLOW_API_KEY environment variable")
 
+    import zipfile
+
     from roboflow import Roboflow
 
     rf = Roboflow(api_key=api_key)
     project = rf.workspace(args.workspace).project(args.project)
-    dataset = project.version(args.version).download("yolov8", location=str(DATA_DIR))
+
+    available = [v.version for v in project.versions()]
+    print(f"Available versions: {available}")
+    if args.version not in available:
+        raise SystemExit(
+            f"Version {args.version} not found. Pick one from: {available}"
+        )
+
+    try:
+        dataset = project.version(args.version).download("yolov8", location=str(DATA_DIR))
+    except zipfile.BadZipFile:
+        raise SystemExit(
+            "Download returned a bad zip — the API likely rejected the request. "
+            "Check that your API key has access to this project and version."
+        )
     print(f"Dataset downloaded to {dataset.location}")
     print("Class names:", dataset.classes)
 
