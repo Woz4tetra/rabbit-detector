@@ -132,6 +132,28 @@ All power calls are non-fatal (logged as warnings on failure). The `/boot/firmwa
 
 The system returns from `ALERT` to `SCANNING` after 3 consecutive frames with no rabbit detected.
 
+## Rabbit deterrent sound research
+
+**Target species**: Eastern cottontail (*Sylvilagus floridanus*) — solitary, flees to cover when startled. If in Europe/Australia, target is European rabbit (*Oryctolagus cuniculus*), which lives in warrens and has a group alarm response. Both respond to the same predator sounds.
+
+**Hearing range**: 96 Hz – 49,000 Hz. Sharpest sensitivity at 1,000–16,000 Hz. This overlaps directly with audible predator calls, so a standard USB speaker is the right tool.
+
+**What works**:
+- Predator vocalizations in the audible range: hawk screams, fox barks, coyote calls, owl hoots
+- Red-tailed hawk scream is ideal for cottontails — direct aerial predator, sharp call peaks in the 1–4 kHz sensitivity band
+- Distress calls (baby rabbit screams) are effective but exceed 50,000 Hz — a USB speaker cannot reproduce them
+
+**What doesn't work long-term**:
+- Ultrasonic devices (15,000–25,000 Hz): rabbits habituate within days to weeks
+- Any single fixed sound played repeatedly: rabbits adapt quickly
+
+**Habituation mitigation**: Rotate between 2–3 different sounds (e.g., hawk + coyote) and randomize playback. `AudioPlayer` already does this — drop multiple `.wav` files into `data/sounds/` and each detection plays a random one.
+
+**Sound sources (free)**:
+- [Freesound.org — Red-Tailed Hawk, CC0](https://freesound.org/people/craigsmith/sounds/479610/)
+- [Pixabay — Red-Tailed Hawk sounds, royalty-free](https://pixabay.com/sound-effects/search/red-tailed-hawk/)
+- [SoundBible — Hawk sounds, WAV + MP3](https://soundbible.com/tags-hawk.html)
+
 ## Inference performance target
 
 `test_detector.py` warns if inference exceeds 5 or 30 seconds. On the Pi Zero W (ARMv6, single-core, `cv2.dnn`), expect 15-60 seconds per frame at `image_size=320`. The ARMv6 has no NEON SIMD, so there is no fast path for convolution. This means the ALERT-state 5-second polling interval will be exceeded; the system simply runs as fast as it can. Verify imgsz=320 in both `export_onnx.py` and `config.yaml`.
