@@ -22,6 +22,8 @@ def main() -> None:
     parser.add_argument("--workspace", default="yolodemov5")
     parser.add_argument("--project", default="rabbit-n4bj4")
     parser.add_argument("--version", type=int, default=1)
+    parser.add_argument("--data-yaml", default=str(TRAINING_DIR / "data.yaml"),
+                        help="Path to write the data.yaml for training")
     args = parser.parse_args()
 
     api_key = os.environ.get("ROBOFLOW_API_KEY")
@@ -49,7 +51,7 @@ def main() -> None:
         shutil.copytree(src_dir, dst_dir)
 
     yaml_src = dst_dir / "data.yaml"
-    yaml_dst = TRAINING_DIR / "data.yaml"
+    yaml_dst = Path(args.data_yaml)
     shutil.copy(yaml_src, yaml_dst)
 
     import yaml
