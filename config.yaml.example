@@ -1,0 +1,25 @@
+detection:
+  model_path: data/models/rabbit_detector.onnx
+  confidence_threshold: 0.45
+  image_size: 320
+  capture_width: 640
+  capture_height: 480
+
+audio:
+  sound_file: data/sounds/deterrent.wav
+  volume: 0.9
+
+email:
+  host: smtp.gmail.com
+  port: 587
+  username: you@gmail.com
+  # Use a Gmail App Password, not your account password.
+  # Generate one at: https://myaccount.google.com/apppasswords
+  password: "xxxx-xxxx-xxxx-xxxx"
+  from_addr: you@gmail.com
+  to_addr: you@gmail.com
+  # Minimum seconds between emails to avoid inbox flooding
+  cooldown_seconds: 300
+
+log_detections: true
+log_dir: data/logs

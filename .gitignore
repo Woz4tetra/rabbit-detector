@@ -1,0 +1,16 @@
+config.yaml
+data/models/*.onnx
+data/models/*.pt
+data/logs/
+training/runs/
+training/data/
+training/.venv/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.DS_Store

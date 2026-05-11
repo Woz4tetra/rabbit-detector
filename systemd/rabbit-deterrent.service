@@ -1,0 +1,22 @@
+[Unit]
+Description=Rabbit Detection and Deterrent System
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=__PROJECT_ROOT__
+ExecStartPre=/bin/bash -c '/usr/bin/tvservice -o || true'
+ExecStartPre=/bin/bash -c 'echo 0 > /sys/class/leds/led0/brightness || true'
+ExecStart=__PROJECT_ROOT__/.venv/bin/rabbit-detect
+Restart=on-failure
+RestartSec=10
+SyslogIdentifier=rabbit-deterrent
+StandardOutput=journal
+StandardError=journal
+SupplementaryGroups=video gpio audio
+
+[Install]
+WantedBy=multi-user.target
