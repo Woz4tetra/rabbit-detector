@@ -49,13 +49,16 @@ def main() -> None:
             "Check that your API key has access to this project and version."
         )
     print(f"Dataset downloaded to {dataset.location}")
-    print("Class names:", dataset.classes)
 
     # Write the data.yaml pointer used by train.py
     yaml_src = Path(dataset.location) / "data.yaml"
     yaml_dst = TRAINING_DIR / "data.yaml"
     yaml_dst.write_text(yaml_src.read_text())
     print(f"data.yaml written to {yaml_dst}")
+
+    import yaml
+    meta = yaml.safe_load(yaml_dst.read_text())
+    print("Class names:", meta.get("names", []))
 
 
 if __name__ == "__main__":
