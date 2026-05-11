@@ -14,7 +14,10 @@ append_if_missing() {
     grep -qxF "$line" "$CONFIG" || echo "$line" | sudo tee -a "$CONFIG" > /dev/null
 }
 
-append_if_missing "gpu_mem=16"
+# 128MB minimum for libcamera/Picamera2 to load the unicam driver.
+# Lower values cause the firmware to fall back to bcm2835_unicam_legacy,
+# which is V4L2-only and invisible to libcamera.
+append_if_missing "gpu_mem=128"
 # Do not set arm_freq below 1000MHz on the Zero W — single-core ARMv6 inference
 # is already slow (~15-60s per frame); underclocking makes it unusable.
 append_if_missing "dtoverlay=disable-bt"

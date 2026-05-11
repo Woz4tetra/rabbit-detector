@@ -119,6 +119,8 @@ Detection state (`SCANNING` / `ALERT`) survives reboots via `/var/lib/rabbit-det
 
 All power calls are non-fatal (logged as warnings on failure). The `/boot/firmware/config.txt` changes from `optimize_pi.sh` are permanent and require a reboot. Do NOT set `arm_freq` below 1000MHz — single-core ARMv6 inference is already slow; underclocking makes it unusable.
 
+`gpu_mem` must be at least 128. Values below that cause the firmware to load `bcm2835_unicam_legacy` (V4L2-only) instead of the libcamera unicam driver, making the camera invisible to Picamera2. The Pi Zero W has 512MB RAM so 128MB GPU split leaves 384MB for the CPU.
+
 ## Email cooldown
 
 `EmailNotifier` suppresses duplicate emails within `cooldown_seconds` (default 300s). The cooldown resets when the process restarts. A rabbit that triggers an alert shortly after a restart can send an email even if one was sent before the restart.
