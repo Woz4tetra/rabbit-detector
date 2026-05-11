@@ -48,13 +48,22 @@ def main() -> None:
             shutil.rmtree(dst_dir)
         shutil.copytree(src_dir, dst_dir)
 
-    yaml_src = dst_dir / "data.yaml"
-    yaml_dst = TRAINING_DIR / "data.yaml"
-    shutil.copy(yaml_src, yaml_dst)
-
+    # Rewrite data.yaml with absolute paths so YOLO can find images regardless
+    # of working directory. Roboflow exports relative paths (e.g. ../train/images)
+    # that only work inside the zip structure.
     import yaml
-    meta = yaml.safe_load(yaml_dst.read_text())
+
+    yaml_src = dst_dir / "data.yaml"
+    meta = yaml.safe_load(yaml_src.read_text())
+    for split in ("train", "val", "test"):
+        if split in meta:
+            p = (yaml_src.parent / meta[split]).resolve()
+            meta[split] = str(p)
+
+    yaml_dst = TRAINING_DIR / "data.yaml"
+    yaml_dst.write_text(yaml.dump(meta))
     print(f"Dataset at {dst_dir}")
+    print(f"data.yaml written to {yaml_dst}")
     print("Class names:", meta.get("names", []))
 
 
