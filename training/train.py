@@ -35,7 +35,6 @@ def _ir_augment_callback(trainer) -> None:
 TRAINING_DIR = Path(__file__).parent
 PROJECT_ROOT = TRAINING_DIR.parent
 RUNS_DIR = TRAINING_DIR / "runs"
-DATA_YAML = TRAINING_DIR / "data.yaml"
 OUTPUT_MODEL = PROJECT_ROOT / "data" / "models" / "rabbit_detector_best.pt"
 
 
@@ -46,17 +45,20 @@ def main() -> None:
     parser.add_argument("--batch", type=int, default=192)
     parser.add_argument("--imgsz", type=int, default=320)
     parser.add_argument("--name", default="rabbit_v1")
+    parser.add_argument("--data-yaml", default=str(TRAINING_DIR / "data.yaml"),
+                        help="Path to data.yaml (default: training/data.yaml)")
     args = parser.parse_args()
 
-    if not DATA_YAML.exists():
-        raise SystemExit(f"data.yaml not found at {DATA_YAML}. Run download_dataset.py first.")
+    data_yaml = Path(args.data_yaml)
+    if not data_yaml.exists():
+        raise SystemExit(f"data.yaml not found at {data_yaml}. Run download_dataset.py first.")
 
     from ultralytics import YOLO
 
     model = YOLO("yolov8n.pt")
     model.add_callback("on_train_batch_start", _ir_augment_callback)
     results = model.train(
-        data=str(DATA_YAML),
+        data=str(data_yaml),
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=args.batch,
