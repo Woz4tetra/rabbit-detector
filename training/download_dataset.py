@@ -1,7 +1,8 @@
-"""Download rabbit detection dataset from Roboflow Universe.
+"""Download rabbit detection dataset from Roboflow.
 
 Usage:
-    ROBOFLOW_API_KEY=<key> python training/download_dataset.py [--workspace <ws>] [--project <proj>] [--version <n>]
+    ROBOFLOW_API_KEY=<key> python training/download_dataset.py
+    # or store key in ~/ROBOFLOW_API_KEY and run without the env var prefix
 
 The downloaded dataset lands in training/data/ and a data.yaml is written
 that YOLO training scripts can consume directly.
@@ -10,72 +11,50 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 from pathlib import Path
 
 TRAINING_DIR = Path(__file__).parent
-DATA_DIR = TRAINING_DIR / "data"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--workspace", default="roboflow-universe-projects")
+    parser.add_argument("--workspace", default="yolodemov5")
     parser.add_argument("--project", default="rabbit-n4bj4")
     parser.add_argument("--version", type=int, default=1)
     args = parser.parse_args()
 
     api_key = os.environ.get("ROBOFLOW_API_KEY")
     if not api_key:
-        raise SystemExit("Set ROBOFLOW_API_KEY environment variable")
-
-    import zipfile
+        key_file = Path.home() / "ROBOFLOW_API_KEY"
+        if key_file.exists():
+            api_key = key_file.read_text().strip()
+    if not api_key:
+        raise SystemExit(
+            "No API key found. Set ROBOFLOW_API_KEY env var or write it to ~/ROBOFLOW_API_KEY"
+        )
 
     from roboflow import Roboflow
 
     rf = Roboflow(api_key=api_key)
-    project = rf.workspace(args.workspace).project(args.project)
+    version = rf.workspace(args.workspace).project(args.project).version(args.version)
+    dataset = version.download("yolov8")
 
-    available = [v.version for v in project.versions()]
-    print(f"Available versions: {available}")
-    if str(args.version) not in available:
-        raise SystemExit(
-            f"Version {args.version} not found. Pick one from: {available}"
-        )
+    # Copy downloaded data into training/data/ and write training/data.yaml
+    src_dir = Path(dataset.location)
+    dst_dir = TRAINING_DIR / "data"
+    if src_dir != dst_dir:
+        if dst_dir.exists():
+            shutil.rmtree(dst_dir)
+        shutil.copytree(src_dir, dst_dir)
 
-    try:
-        dataset = project.version(args.version).download("yolov8", location=str(DATA_DIR))
-    except zipfile.BadZipFile:
-        raise SystemExit(
-            "Download returned a bad zip — the API likely rejected the request. "
-            "Check that your API key has access to this project and version."
-        )
-    print(f"Dataset downloaded to {dataset.location}")
-
-    # Some roboflow versions download the zip but skip extraction.
-    # Extract manually if data.yaml is missing.
-    dataset_dir = Path(dataset.location)
-    if not (dataset_dir / "data.yaml").exists():
-        zip_path = dataset_dir / "roboflow.zip"
-        if not zip_path.exists():
-            raise SystemExit(f"Neither data.yaml nor roboflow.zip found in {dataset_dir}")
-        print(f"Extracting {zip_path}...")
-        raw = zip_path.read_bytes()
-        if b"NoSuchKey" in raw or b"<?xml" in raw:
-            raise SystemExit(
-                "Roboflow returned a storage error instead of a zip.\n"
-                "The YOLOv8 export for this version has not been generated yet.\n"
-                "Fix: go to your Roboflow project -> Version -> Export Dataset -> YOLOv8 -> Generate, then re-run."
-            )
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            zf.extractall(dataset_dir)
-
-    # Write the data.yaml pointer used by train.py
-    yaml_src = dataset_dir / "data.yaml"
+    yaml_src = dst_dir / "data.yaml"
     yaml_dst = TRAINING_DIR / "data.yaml"
-    yaml_dst.write_text(yaml_src.read_text())
-    print(f"data.yaml written to {yaml_dst}")
+    shutil.copy(yaml_src, yaml_dst)
 
     import yaml
     meta = yaml.safe_load(yaml_dst.read_text())
+    print(f"Dataset at {dst_dir}")
     print("Class names:", meta.get("names", []))
 
 
