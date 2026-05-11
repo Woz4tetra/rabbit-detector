@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 
-import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -19,14 +18,14 @@ class CameraCapture:
         from picamera2 import Picamera2
 
         cam = Picamera2()
-        # OV5647 via Picamera2 returns RGB despite BGR888 being requested; use RGB888
-        # explicitly and convert to BGR so all downstream code (cv2, detector) is consistent.
+        # Picamera2 "RGB888" on OV5647/Trixie yields BGR byte order — the format name
+        # is misleading but the raw array is directly usable by cv2 without conversion.
         config = cam.create_still_configuration(
             main={"size": (self.width, self.height), "format": "RGB888"}
         )
         cam.configure(config)
         cam.start()
-        frame = cv2.cvtColor(cam.capture_array(), cv2.COLOR_RGB2BGR)
+        frame = cam.capture_array()
         cam.stop()
         cam.close()
         logger.debug("Captured frame %dx%d", frame.shape[1], frame.shape[0])
@@ -39,7 +38,7 @@ class CameraCapture:
         self._cam = Picamera2()
         frame_duration_us = int(1_000_000 / frame_rate)
         config = self._cam.create_video_configuration(
-            main={"size": (self.width, self.height), "format": "RGB888"},
+            main={"size": (self.width, self.height), "format": "RGB888"},  # yields BGR bytes, see capture()
             controls={"FrameDurationLimits": (frame_duration_us, frame_duration_us)},
         )
         self._cam.configure(config)
@@ -48,7 +47,7 @@ class CameraCapture:
 
     def capture_frame(self) -> np.ndarray:
         """Capture the next frame from the active stream."""
-        return cv2.cvtColor(self._cam.capture_array(), cv2.COLOR_RGB2BGR)
+        return self._cam.capture_array()
 
     def stop_stream(self) -> None:
         """Stop and close the camera stream."""
