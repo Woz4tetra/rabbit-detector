@@ -4,9 +4,13 @@ detection:
   image_size: 320
   capture_width: 640
   capture_height: 480
+  # Camera stream frame rate during ALERT state (fps). Also sets the video output fps.
+  frame_rate: 10.0
 
 audio:
-  sound_file: data/sounds/deterrent.wav
+  # Directory containing .wav files to play as deterrents.
+  # A random file is chosen each time a rabbit is detected.
+  sounds_dir: data/sounds
   volume: 0.9
 
 email:
@@ -21,6 +25,17 @@ email:
   to_addr: you@gmail.com
   # Minimum seconds between emails to avoid inbox flooding
   cooldown_seconds: 300
+
+storage:
+  # Save every inference frame as a JPEG. Images are named by timestamp and tagged
+  # _rabbit or _clear. Oldest images are deleted once max_images is reached.
+  save_images: false
+  image_dir: data/images
+  max_images: 1000  # 0 = unlimited
+
+  # Record an MJPEG video for each ALERT event. Video runs at detection.frame_rate.
+  save_video: false
+  video_dir: data/videos
 
 log_detections: true
 log_dir: data/logs

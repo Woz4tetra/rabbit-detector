@@ -38,7 +38,7 @@ def main() -> None:
         image_size=config.detection.image_size,
     )
     audio = AudioPlayer(
-        sound_path=config.audio.resolved_sound_path(),
+        sounds_dir=config.audio.resolved_sounds_dir(),
         volume=config.audio.volume,
     )
     notifier = EmailNotifier(config.email)
