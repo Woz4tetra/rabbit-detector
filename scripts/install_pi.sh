@@ -20,8 +20,7 @@ sudo apt-get install -y \
     python3-opencv \
     python3-pygame \
     libcamera-dev \
-    libasound2-dev \
-    libatlas-base-dev
+    libasound2-dev
 
 echo "Creating Python venv (with system site-packages for picamera2)..."
 cd "$PROJECT_ROOT"

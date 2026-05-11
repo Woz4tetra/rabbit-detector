@@ -20,6 +20,13 @@ append_if_missing "gpu_mem=16"
 append_if_missing "dtoverlay=disable-bt"
 append_if_missing "camera_auto_detect=1"
 
+echo "Disabling WiFi power save (via NetworkManager)..."
+sudo mkdir -p /etc/NetworkManager/conf.d
+cat <<'EOF' | sudo tee /etc/NetworkManager/conf.d/powersave-off.conf > /dev/null
+[connection]
+wifi.powersave = 2
+EOF
+
 echo "Disabling unused systemd services..."
 for svc in bluetooth avahi-daemon triggerhappy ModemManager; do
     if systemctl list-unit-files "${svc}.service" &>/dev/null; then

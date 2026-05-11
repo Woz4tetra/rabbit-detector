@@ -2,11 +2,12 @@
 
 ## What this is
 
-Raspberry Pi Zero 2W system that detects rabbits via a CSI camera, plays a deterrent sound, and emails a photo. Runs 24/7 on a 12V 6Ah battery (~6-7 days runtime).
+Raspberry Pi Zero W system that detects rabbits via a CSI camera, plays a deterrent sound, and emails a photo. Runs 24/7 on a 12V 6Ah battery (~6-7 days runtime).
 
 ## Hardware
 
 - **Pi**: Zero W (single-core ARM1176JZF-S ARMv6, 512MB RAM, WiFi built-in)
+- **OS**: Raspbian GNU/Linux 13 (Trixie), kernel 6.12.75+rpt-rpi-v6, Python 3.13.5
 - **Camera**: Arducam Day-Night (B07X1VGQBL) — OV5647, 5MP, automatic IR-cut filter switching, built-in IR LEDs, M12 lens mount, MIPI CSI ribbon cable (needs Pi Zero mini-CSI adapter cable)
 - **Speaker**: USB speaker via micro-USB OTG adapter (the only USB-A port on the Pi; nothing else can share it)
 - **Power**: 12V 6Ah battery → 5V/3A buck converter → Pi
@@ -17,8 +18,8 @@ Raspberry Pi Zero 2W system that detects rabbits via a CSI camera, plays a deter
 | Task | Where |
 |------|-------|
 | `training/` scripts | A6000 cluster (3× GPUs, 48GB VRAM each) |
-| `src/rabbit_deterrent/` | Raspberry Pi Zero 2W |
-| `scripts/test_*.py` | Raspberry Pi Zero 2W |
+| `src/rabbit_deterrent/` | Raspberry Pi Zero W |
+| `scripts/test_*.py` | Raspberry Pi Zero W |
 | `scripts/deploy.sh` | Developer machine (rsyncs to Pi) |
 
 ## Key commands
@@ -59,13 +60,13 @@ The Pi Zero W runs ARMv6 (`armv6l`). PyPI has no binary wheels for `numpy`, `ope
 python3-numpy  python3-opencv  python3-pygame  python3-picamera2
 ```
 
-The venv must use `--system-site-packages` so these apt packages are importable inside it. The inference engine is `cv2.dnn` (OpenCV's built-in DNN module), not onnxruntime.
+The venv must use `--system-site-packages` so these apt packages are importable inside it. The inference engine is `cv2.dnn` (OpenCV's built-in DNN module, v4.10.0 on Trixie), not onnxruntime.
 
 ```bash
 python3 -m venv --system-site-packages .venv
 ```
 
-`install_pi.sh` handles this automatically.
+`install_pi.sh` handles this automatically. Trixie enforces PEP 668 (no pip installs into system Python), but the venv pip is unaffected.
 
 ## ALSA / USB speaker
 
@@ -80,7 +81,7 @@ python3 -m venv --system-site-packages .venv
 
 ## ONNX model output format
 
-The model is exported with `end2end=False` (raw anchors, not decoded boxes). `detector.py` applies NMS manually. Output tensor shape: `[1, num_classes+4, num_anchors]`. Transposing to `[num_anchors, num_classes+4]` before processing.
+The model is exported with `end2end=False` (raw anchors, not decoded boxes). `detector.py` applies NMS manually via `cv2.dnn.NMSBoxes`. Output tensor shape: `[1, num_classes+4, num_anchors]`. Transposing to `[num_anchors, num_classes+4]` before processing. Export uses opset=12 for compatibility with OpenCV 4.5.x; 4.10.0 on Trixie supports higher opsets too.
 
 ## State persistence
 
@@ -88,11 +89,16 @@ Detection state (`SCANNING` / `ALERT`) survives reboots via `/var/lib/rabbit-det
 
 ## Systemd service
 
-`systemd/rabbit-deterrent.service` contains the literal string `__PROJECT_ROOT__`. `install_service.sh` substitutes the real path with `sed` when it copies the file to `/etc/systemd/system/`. Do not edit the installed copy directly; edit the source file and re-run `install_service.sh`.
+`systemd/rabbit-deterrent.service` contains `__PROJECT_ROOT__` and `__USER__` placeholders. `install_service.sh` substitutes both with `sed` when copying to `/etc/systemd/system/`. Do not edit the installed copy directly; edit the source file and re-run `install_service.sh`.
 
 ## Power optimizations
 
-`power.py` runs at startup via `main.py` and disables HDMI (`tvservice -o`), the ACT LED, and WiFi power-save mode. These are non-fatal if they fail (logged as warnings). The `/boot/firmware/config.txt` changes from `optimize_pi.sh` are permanent and require a reboot.
+`power.py` runs at startup via `main.py`. On Trixie:
+- HDMI: `vcgencmd display_power 0` (replaces `tvservice -o` which was removed)
+- ACT LED: `/sys/class/leds/ACT/brightness` (was `led0` on older Pi OS)
+- WiFi power save: disabled permanently by `optimize_pi.sh` via `/etc/NetworkManager/conf.d/powersave-off.conf`
+
+All power calls are non-fatal (logged as warnings on failure). The `/boot/firmware/config.txt` changes from `optimize_pi.sh` are permanent and require a reboot. Do NOT set `arm_freq` below 1000MHz — single-core ARMv6 inference is already slow; underclocking makes it unusable.
 
 ## Email cooldown
 

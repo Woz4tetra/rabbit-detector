@@ -5,11 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
+User=__USER__
+Group=__USER__
 WorkingDirectory=__PROJECT_ROOT__
-ExecStartPre=/bin/bash -c '/usr/bin/tvservice -o || true'
-ExecStartPre=/bin/bash -c 'echo 0 > /sys/class/leds/led0/brightness || true'
 ExecStart=__PROJECT_ROOT__/.venv/bin/rabbit-detect
 Restart=on-failure
 RestartSec=10

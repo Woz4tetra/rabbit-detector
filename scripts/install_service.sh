@@ -10,9 +10,10 @@ SERVICE_DST=/etc/systemd/system/rabbit-deterrent.service
 echo "Installing service to $SERVICE_DST"
 sudo cp "$SERVICE_SRC" "$SERVICE_DST"
 sudo sed -i "s|__PROJECT_ROOT__|${PROJECT_ROOT}|g" "$SERVICE_DST"
+sudo sed -i "s|__USER__|${USER}|g" "$SERVICE_DST"
 
 sudo mkdir -p /var/lib/rabbit-deterrent
-sudo chown pi:pi /var/lib/rabbit-deterrent
+sudo chown "${USER}:${USER}" /var/lib/rabbit-deterrent
 
 sudo systemctl daemon-reload
 sudo systemctl enable rabbit-deterrent
