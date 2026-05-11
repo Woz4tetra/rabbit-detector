@@ -29,7 +29,7 @@ def convert(src: Path, out_dir: Path) -> Path:
             "-i", str(src),
             "-ar", "48000",      # matches USB speaker native rate
             "-ac", "2",          # stereo (USB speaker requires FL FR)
-            "-sample_fmt", "s16le",  # 16-bit signed LE
+            "-sample_fmt", "s16",    # 16-bit signed (WAV container is always LE)
             str(dst),
         ],
         capture_output=True,
