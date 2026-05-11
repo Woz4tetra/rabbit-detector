@@ -19,7 +19,7 @@ DATA_DIR = TRAINING_DIR / "data"
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", default="roboflow-universe-projects")
-    parser.add_argument("--project", default="rabbit-detection-hqrjk")
+    parser.add_argument("--project", default="rabbit-n4bj4")
     parser.add_argument("--version", type=int, default=1)
     args = parser.parse_args()
 
