@@ -58,8 +58,12 @@ def main() -> None:
     for d in detections:
         print(f"  confidence={d.confidence:.2f}  bbox=({d.x1:.0f},{d.y1:.0f})->({d.x2:.0f},{d.y2:.0f})")
 
-    if elapsed > 5.0:
-        print("WARNING: Inference exceeded 5 seconds — may miss 5-second alert cycles.")
+    # Pi Zero W (ARMv6, single-core, cv2.dnn): expect 15-60s per frame.
+    # Pi Zero 2W (ARMv7, quad-core): expect 2-4s per frame.
+    if elapsed > 30.0:
+        print("WARNING: Inference exceeded 30 seconds — alert polling will lag significantly.")
+    elif elapsed > 5.0:
+        print(f"WARNING: Inference took {elapsed:.1f}s — alert polling interval may be exceeded.")
 
 
 if __name__ == "__main__":

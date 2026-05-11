@@ -9,16 +9,19 @@ echo "Updating apt..."
 sudo apt-get update -qq
 
 echo "Installing system dependencies..."
+# numpy, opencv, and pygame are installed from apt because pip has no armv6l wheels.
+# The venv uses --system-site-packages so they are importable inside it.
 sudo apt-get install -y \
     python3-venv \
     python3-pip \
     python3-libcamera \
     python3-picamera2 \
+    python3-numpy \
+    python3-opencv \
     python3-pygame \
     libcamera-dev \
     libasound2-dev \
-    libatlas-base-dev \
-    libopenblas-dev
+    libatlas-base-dev
 
 echo "Creating Python venv (with system site-packages for picamera2)..."
 cd "$PROJECT_ROOT"

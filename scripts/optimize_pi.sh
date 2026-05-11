@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time power optimization for Raspberry Pi Zero 2W.
+# One-time power optimization for Raspberry Pi Zero W.
 # Run once after first boot, then reboot.
 set -euo pipefail
 
@@ -15,8 +15,8 @@ append_if_missing() {
 }
 
 append_if_missing "gpu_mem=16"
-append_if_missing "arm_freq=600"
-append_if_missing "core_freq=250"
+# Do not set arm_freq below 1000MHz on the Zero W — single-core ARMv6 inference
+# is already slow (~15-60s per frame); underclocking makes it unusable.
 append_if_missing "dtoverlay=disable-bt"
 append_if_missing "camera_auto_detect=1"
 

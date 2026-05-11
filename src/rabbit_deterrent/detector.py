@@ -4,8 +4,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+import cv2
 import numpy as np
-import onnxruntime as ort
 
 logger = logging.getLogger(__name__)
 
@@ -25,22 +25,18 @@ class OnnxRabbitDetector:
         self.confidence_threshold = confidence_threshold
         self.image_size = image_size
         logger.info("Loading ONNX model from %s", model_path)
-        self.session = ort.InferenceSession(
-            str(model_path), providers=["CPUExecutionProvider"]
-        )
-        self.input_name = self.session.get_inputs()[0].name
-        logger.info("Model loaded. Input: %s", self.input_name)
+        self.net = cv2.dnn.readNetFromONNX(str(model_path))
+        logger.info("Model loaded")
 
     def detect(self, image_bgr: np.ndarray) -> list[Detection]:
         blob, scale, (pad_x, pad_y) = self._preprocess(image_bgr)
-        outputs = self.session.run(None, {self.input_name: blob})
-        return self._postprocess(outputs[0], scale, pad_x, pad_y, image_bgr.shape)
+        self.net.setInput(blob)
+        output = self.net.forward()
+        return self._postprocess(output, scale, pad_x, pad_y, image_bgr.shape)
 
     def _preprocess(
         self, image_bgr: np.ndarray
     ) -> tuple[np.ndarray, float, tuple[int, int]]:
-        import cv2
-
         h, w = image_bgr.shape[:2]
         scale = min(self.image_size / w, self.image_size / h)
         new_w, new_h = int(w * scale), int(h * scale)
@@ -87,8 +83,6 @@ class OnnxRabbitDetector:
         y2 = (cy + bh / 2 - pad_y) / scale
 
         # NMS
-        import cv2
-
         indices = cv2.dnn.NMSBoxes(
             bboxes=np.stack([x1, y1, x2 - x1, y2 - y1], axis=1).tolist(),
             scores=confidences.tolist(),

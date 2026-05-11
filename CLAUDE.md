@@ -6,8 +6,8 @@ Raspberry Pi Zero 2W system that detects rabbits via a CSI camera, plays a deter
 
 ## Hardware
 
-- **Pi**: Zero 2W (quad-core Cortex-A53, 512MB RAM, WiFi built-in)
-- **Camera**: Arducam Day-Night (B07X1VGQSL) — OV5647, 5MP, automatic IR-cut filter switching, built-in IR LEDs, M12 lens mount, MIPI CSI ribbon cable (needs Pi Zero mini-CSI adapter cable)
+- **Pi**: Zero W (single-core ARM1176JZF-S ARMv6, 512MB RAM, WiFi built-in)
+- **Camera**: Arducam Day-Night (B07X1VGQBL) — OV5647, 5MP, automatic IR-cut filter switching, built-in IR LEDs, M12 lens mount, MIPI CSI ribbon cable (needs Pi Zero mini-CSI adapter cable)
 - **Speaker**: USB speaker via micro-USB OTG adapter (the only USB-A port on the Pi; nothing else can share it)
 - **Power**: 12V 6Ah battery → 5V/3A buck converter → Pi
 - **No I2S DAC, no Witty Pi HAT**
@@ -53,7 +53,13 @@ sudo systemctl restart rabbit-deterrent
 
 ## Python environment on the Pi
 
-Use `--system-site-packages` when creating the venv. `picamera2` is not on PyPI; it comes from the system apt package `python3-picamera2`. Without the flag, imports fail.
+The Pi Zero W runs ARMv6 (`armv6l`). PyPI has no binary wheels for `numpy`, `opencv-python-headless`, `pygame`, or `onnxruntime` on ARMv6. These all come from apt:
+
+```
+python3-numpy  python3-opencv  python3-pygame  python3-picamera2
+```
+
+The venv must use `--system-site-packages` so these apt packages are importable inside it. The inference engine is `cv2.dnn` (OpenCV's built-in DNN module), not onnxruntime.
 
 ```bash
 python3 -m venv --system-site-packages .venv
@@ -103,4 +109,4 @@ The system returns from `ALERT` to `SCANNING` after 3 consecutive frames with no
 
 ## Inference performance target
 
-`test_detector.py` warns if inference exceeds 5 seconds. At `image_size=320` on a Pi Zero 2W, expect 2-4 seconds. If it runs slower, verify the model is at imgsz=320 (not 640) and that only `CPUExecutionProvider` is active.
+`test_detector.py` warns if inference exceeds 5 or 30 seconds. On the Pi Zero W (ARMv6, single-core, `cv2.dnn`), expect 15-60 seconds per frame at `image_size=320`. The ARMv6 has no NEON SIMD, so there is no fast path for convolution. This means the ALERT-state 5-second polling interval will be exceeded; the system simply runs as fast as it can. Verify imgsz=320 in both `export_onnx.py` and `config.yaml`.
