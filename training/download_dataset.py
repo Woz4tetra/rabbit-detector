@@ -40,13 +40,14 @@ def main() -> None:
     version = rf.workspace(args.workspace).project(args.project).version(args.version)
     dataset = version.download("yolov8")
 
-    # Copy downloaded data into training/data/ and write training/data.yaml
+    # Move downloaded data into training/data/, removing the roboflow staging dir.
     src_dir = Path(dataset.location)
     dst_dir = TRAINING_DIR / "data"
     if src_dir != dst_dir:
         if dst_dir.exists():
             shutil.rmtree(dst_dir)
         shutil.copytree(src_dir, dst_dir)
+        shutil.rmtree(src_dir)
 
     # Rewrite data.yaml with absolute paths so YOLO can find images regardless
     # of working directory. Roboflow exports relative paths (e.g. ../train/images)
