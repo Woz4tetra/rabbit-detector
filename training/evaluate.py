@@ -87,7 +87,7 @@ def main() -> None:
     meta = yaml.safe_load(data_yaml.read_text())
     class_names = meta.get("names", [])
     test_images_dir = Path(meta["test"])
-    test_labels_dir = test_images_dir.parent.parent / "labels"
+    test_labels_dir = test_images_dir.parent / "labels"
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
