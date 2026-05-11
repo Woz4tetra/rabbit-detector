@@ -57,8 +57,11 @@ def main() -> None:
     meta = yaml.safe_load(yaml_src.read_text())
     for split in ("train", "val", "test"):
         if split in meta:
-            p = (yaml_src.parent / meta[split]).resolve()
-            meta[split] = str(p)
+            # Roboflow's paths (e.g. "../valid/images") are relative to a layout
+            # that doesn't match our extraction directory. Take only the last two
+            # path components (e.g. "valid/images") and root them in dst_dir.
+            tail = Path(meta[split]).parts[-2:]
+            meta[split] = str(dst_dir / Path(*tail))
 
     yaml_dst = TRAINING_DIR / "data.yaml"
     yaml_dst.write_text(yaml.dump(meta))
