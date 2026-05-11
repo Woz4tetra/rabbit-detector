@@ -36,7 +36,7 @@ def main() -> None:
 
     available = [v.version for v in project.versions()]
     print(f"Available versions: {available}")
-    if args.version not in available:
+    if str(args.version) not in available:
         raise SystemExit(
             f"Version {args.version} not found. Pick one from: {available}"
         )
