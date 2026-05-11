@@ -14,7 +14,9 @@ def _ensure_init() -> None:
     if not _initialized:
         import pygame
 
-        pygame.mixer.init(frequency=44100, size=-16, channels=1, buffer=512)
+        # USB speaker (USB2.0 Device) only supports 48000 Hz stereo.
+        # Matching hardware exactly avoids ALSA resampling, which causes crackling.
+        pygame.mixer.init(frequency=48000, size=-16, channels=2, buffer=2048)
         _initialized = True
 
 

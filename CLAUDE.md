@@ -91,6 +91,8 @@ python3 -m venv --system-site-packages .venv
 
 `optimize_pi.sh` writes `/etc/asound.conf` pointing at card index 1. If the USB speaker enumerates as a different card index, check with `aplay -l` and update the card number in `/etc/asound.conf`. The card index is not stable across reboots if other USB devices are plugged in (they shouldn't be).
 
+USB speaker hardware spec (USB2.0 Device, card 1): S16_LE, 48000 Hz, stereo only. Pygame mixer and `convert_sound.py` are both configured to match this exactly. Mismatching frequency or channels forces ALSA to resample in software, causing crackling.
+
 ## Config
 
 - `config.yaml` is **gitignored**. It holds real email credentials.

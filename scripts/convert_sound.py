@@ -27,9 +27,9 @@ def convert(src: Path, out_dir: Path) -> Path:
         [
             "ffmpeg", "-y",
             "-i", str(src),
-            "-ar", "44100",   # sample rate matches pygame mixer
-            "-ac", "1",       # mono
-            "-sample_fmt", "s16",  # 16-bit signed
+            "-ar", "48000",      # matches USB speaker native rate
+            "-ac", "2",          # stereo (USB speaker requires FL FR)
+            "-sample_fmt", "s16le",  # 16-bit signed LE
             str(dst),
         ],
         capture_output=True,
