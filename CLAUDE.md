@@ -22,6 +22,25 @@ Raspberry Pi Zero W system that detects rabbits via a CSI camera, plays a deterr
 | `scripts/test_*.py` | Raspberry Pi Zero W |
 | `scripts/deploy.sh` | Developer machine (rsyncs to Pi) |
 
+## Deploying changes to the Pi
+
+Do not rsync individual files. Commit changes to the repo, then pull on the Pi:
+
+```bash
+# On developer machine: commit and push
+git add <files>
+git commit -m "..."
+git push
+
+# On Pi: pull and reinstall
+ssh ben@192.168.50.252
+cd ~/rabbit-detector
+git pull
+bash scripts/install_pi.sh   # if dependencies changed
+```
+
+Pi IP: `192.168.50.252`
+
 ## Key commands
 
 ```bash

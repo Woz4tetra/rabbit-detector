@@ -35,6 +35,7 @@ class AudioConfig:
 
 @dataclass
 class EmailConfig:
+    enabled: bool
     host: str
     port: int
     username: str
@@ -80,12 +81,13 @@ def load_config(path: str | Path | None = None) -> Config:
             volume=float(a["volume"]),
         ),
         email=EmailConfig(
-            host=e["host"],
-            port=int(e["port"]),
-            username=e["username"],
-            password=e["password"],
-            from_addr=e["from_addr"],
-            to_addr=e["to_addr"],
+            enabled=bool(e.get("enabled", True)),
+            host=e.get("host", ""),
+            port=int(e.get("port", 587)),
+            username=e.get("username", ""),
+            password=e.get("password", ""),
+            from_addr=e.get("from_addr", ""),
+            to_addr=e.get("to_addr", ""),
             cooldown_seconds=int(e.get("cooldown_seconds", 300)),
         ),
         log_detections=bool(raw.get("log_detections", True)),

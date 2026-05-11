@@ -24,6 +24,9 @@ class EmailNotifier:
         return (time.time() - self._last_sent) < self._config.cooldown_seconds
 
     def send(self, subject: str, body: str, image: np.ndarray | None = None) -> bool:
+        if not self._config.enabled:
+            logger.debug("Email disabled")
+            return False
         if self._on_cooldown():
             logger.debug("Email suppressed (cooldown)")
             return False
