@@ -58,6 +58,13 @@ def main() -> None:
         if not zip_path.exists():
             raise SystemExit(f"Neither data.yaml nor roboflow.zip found in {dataset_dir}")
         print(f"Extracting {zip_path}...")
+        raw = zip_path.read_bytes()
+        if b"NoSuchKey" in raw or b"<?xml" in raw:
+            raise SystemExit(
+                "Roboflow returned a storage error instead of a zip.\n"
+                "The YOLOv8 export for this version has not been generated yet.\n"
+                "Fix: go to your Roboflow project -> Version -> Export Dataset -> YOLOv8 -> Generate, then re-run."
+            )
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(dataset_dir)
 
