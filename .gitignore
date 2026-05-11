@@ -1,11 +1,16 @@
 config.yaml
+
 data/models/*.onnx
 data/models/*.pt
 data/logs/
 data/sounds/
+data/images/
+data/videos/
+
 training/runs/
 training/data/
 training/.venv/
+
 __pycache__/
 *.pyc
 *.pyo
