@@ -63,12 +63,12 @@ class DetectionStateMachine:
                 detections = self._detector.detect(frame)
                 rabbit_present = len(detections) > 0
 
-                self._save_frame(frame, rabbit_present)
+                self._save_frame(frame, detections)
 
                 if rabbit_present:
                     best = max(detections, key=lambda d: d.confidence)
                     logger.info("Rabbit detected (conf=%.2f), entering ALERT", best.confidence)
-                    self._handle_detection(frame, best)
+                    self._handle_detection(frame, detections)
                     self._clear_streak = 0
                     self._state = State.ALERT
                     self._start_alert_recording()
@@ -88,12 +88,12 @@ class DetectionStateMachine:
                 detections = self._detector.detect(frame)
                 rabbit_present = len(detections) > 0
 
-                self._save_frame(frame, rabbit_present)
+                self._save_frame(frame, detections)
 
                 if rabbit_present:
                     best = max(detections, key=lambda d: d.confidence)
                     logger.info("Rabbit detected (conf=%.2f) in ALERT", best.confidence)
-                    self._handle_detection(frame, best)
+                    self._handle_detection(frame, detections)
                     self._clear_streak = 0
                 else:
                     self._clear_streak += 1
@@ -109,12 +109,25 @@ class DetectionStateMachine:
                 self._save_state()
                 self._log_event(rabbit_present, detections)
 
-    def _handle_detection(self, frame: np.ndarray, detection: Detection) -> None:
+    def _annotate(self, frame: np.ndarray, detections: list[Detection]) -> np.ndarray:
+        import cv2
+        out = frame.copy()
+        for d in detections:
+            x1, y1, x2, y2 = int(d.x1), int(d.y1), int(d.x2), int(d.y2)
+            cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            label = f"{d.confidence:.0%}"
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
+            cv2.rectangle(out, (x1, y1 - th - 6), (x1 + tw + 4, y1), (0, 255, 0), -1)
+            cv2.putText(out, label, (x1 + 2, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1)
+        return out
+
+    def _handle_detection(self, frame: np.ndarray, detections: list[Detection]) -> None:
+        best = max(detections, key=lambda d: d.confidence)
         self._audio.play()
         self._notifier.send(
             subject="Rabbit detected in garden!",
-            body=f"Confidence: {detection.confidence:.0%}\nBounding box: ({detection.x1:.0f},{detection.y1:.0f}) -> ({detection.x2:.0f},{detection.y2:.0f})",
-            image=frame,
+            body=f"Confidence: {best.confidence:.0%}\nBounding box: ({best.x1:.0f},{best.y1:.0f}) -> ({best.x2:.0f},{best.y2:.0f})",
+            image=self._annotate(frame, detections),
         )
 
     # --- Alert recording (streaming camera + video writer thread) ---
@@ -151,7 +164,7 @@ class DetectionStateMachine:
 
     # --- Image saving ---
 
-    def _save_frame(self, frame: np.ndarray, rabbit_present: bool) -> None:
+    def _save_frame(self, frame: np.ndarray, detections: list[Detection]) -> None:
         if not self._storage.save_images:
             return
         import cv2
@@ -159,9 +172,10 @@ class DetectionStateMachine:
 
         self._image_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        tag = "rabbit" if rabbit_present else "clear"
+        tag = "rabbit" if detections else "clear"
         path = self._image_dir / f"{ts}_{tag}.jpg"
-        cv2.imwrite(str(path), frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        out = self._annotate(frame, detections) if detections else frame
+        cv2.imwrite(str(path), out, [cv2.IMWRITE_JPEG_QUALITY, 80])
         self._prune_images()
 
     def _prune_images(self) -> None:
