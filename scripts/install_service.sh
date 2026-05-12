@@ -18,6 +18,19 @@ sudo chown "${USER}:${USER}" /var/lib/rabbit-deterrent
 # Allow the service user to manage NetworkManager (needed for hotspot mode)
 sudo usermod -a -G netdev "${USER}"
 
+echo "Setting USB speaker volume to 100% and persisting across reboots..."
+amixer -c 1 sset 'PCM' 100% || echo "Warning: could not set mixer level (is the USB speaker plugged in?)"
+sudo alsactl store
+
+# alsa-restore.service races against USB enumeration at boot — the speaker
+# isn't visible yet when it runs. This udev rule fires after the device
+# actually appears, restoring the saved state regardless of timing.
+cat <<'EOF' | sudo tee /etc/udev/rules.d/99-alsa-restore.rules > /dev/null
+ACTION=="add", SUBSYSTEM=="sound", RUN+="/usr/sbin/alsactl restore"
+EOF
+sudo udevadm control --reload-rules
+echo "ALSA volume persisted."
+
 sudo systemctl daemon-reload
 sudo systemctl enable rabbit-deterrent
 sudo systemctl start rabbit-deterrent
