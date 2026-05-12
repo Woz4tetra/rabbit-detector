@@ -24,6 +24,7 @@ audio:
   # 0.0–1.0: normal attenuation. >1.0: amplify by multiplying samples (clips/saturates at extremes).
   # Values like 3.0–5.0 give noticeably louder output at the cost of distortion.
   volume: 3.0
+  alert_interval_seconds: 30.0  # minimum seconds between audio plays while rabbit is present
 
 email:
   # Email is sent by the server, not the Pi. Fill in credentials on both machines.

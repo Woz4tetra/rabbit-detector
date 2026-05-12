@@ -51,6 +51,7 @@ class HotspotConfig:
 class AudioConfig:
     sounds_dir: str
     volume: float
+    alert_interval_seconds: float = 30.0  # min seconds between audio plays while rabbit is present
 
     def resolved_sounds_dir(self) -> Path:
         p = Path(self.sounds_dir)
@@ -122,6 +123,7 @@ def load_config(path: str | Path | None = None) -> Config:
         audio=AudioConfig(
             sounds_dir=a.get("sounds_dir", "data/sounds"),
             volume=float(a.get("volume", 0.9)),
+            alert_interval_seconds=float(a.get("alert_interval_seconds", 30.0)),
         ),
         email=EmailConfig(
             enabled=bool(e.get("enabled", True)),

@@ -162,6 +162,7 @@ class CameraClient:
         self._state, self._clear_streak = self._load_state()
         self._failure_count = 0
         self._log_dir = config.resolved_log_dir()
+        self._last_audio_time: float = 0.0
 
     def run(self) -> None:
         if not self._server.health_check():
@@ -207,10 +208,12 @@ class CameraClient:
                 self._state = State.ALERT
                 self._clear_streak = 0
                 self._save_state()
-                self._audio.play()
+                self._play_audio_if_due()
                 self._start_clip()
                 self._camera.start_stream(1.0 / self._config.detection.alert_poll_interval_seconds)
                 return
+            else:
+                logger.info("No rabbit (conf=%.2f)", confidence)
 
         self._save_state()
         elapsed = time.monotonic() - t0
@@ -241,7 +244,7 @@ class CameraClient:
             if rabbit and confidence >= self._config.detection.confidence_threshold:
                 self._clear_streak = 0
                 logger.info("Rabbit still present (conf=%.2f)", confidence)
-                self._audio.play()
+                self._play_audio_if_due()
             else:
                 self._clear_streak += 1
                 logger.info("Clear streak %d/%d", self._clear_streak, CLEAR_THRESHOLD)
@@ -265,6 +268,17 @@ class CameraClient:
             logger.info("Server is back — resuming SCANNING")
             self._failure_count = 0
             self._state = State.SCANNING
+
+    def _play_audio_if_due(self) -> None:
+        interval = self._config.audio.alert_interval_seconds
+        now = time.monotonic()
+        if now - self._last_audio_time >= interval:
+            self._audio.play()
+            self._last_audio_time = now
+            logger.info("Audio played (next due in %.0fs)", interval)
+        else:
+            remaining = interval - (now - self._last_audio_time)
+            logger.debug("Audio suppressed (%.0fs until next play)", remaining)
 
     def _start_clip(self) -> None:
         if not self._config.clip.enabled:
