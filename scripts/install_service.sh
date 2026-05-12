@@ -15,6 +15,9 @@ sudo sed -i "s|__USER__|${USER}|g" "$SERVICE_DST"
 sudo mkdir -p /var/lib/rabbit-deterrent
 sudo chown "${USER}:${USER}" /var/lib/rabbit-deterrent
 
+# Allow the service user to manage NetworkManager (needed for hotspot mode)
+sudo usermod -a -G netdev "${USER}"
+
 sudo systemctl daemon-reload
 sudo systemctl enable rabbit-deterrent
 sudo systemctl start rabbit-deterrent

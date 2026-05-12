@@ -7,6 +7,7 @@ from .audio import AudioPlayer
 from .camera import CameraCapture
 from .camera_client import CameraClient
 from .config import load_config
+from .hotspot import wait_for_network
 from .logger_setup import setup_logging
 from .power import apply_power_optimizations
 
@@ -26,6 +27,13 @@ def main() -> None:
     logger.info("Server: %s", config.server.url)
 
     apply_power_optimizations()
+
+    if config.hotspot.enabled:
+        wait_for_network(
+            timeout=config.hotspot.timeout_seconds,
+            ssid=config.hotspot.ssid,
+            password=config.hotspot.password,
+        )
 
     camera = CameraCapture(
         width=config.detection.capture_width,

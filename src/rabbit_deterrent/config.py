@@ -40,6 +40,14 @@ class ClipConfig:
 
 
 @dataclass
+class HotspotConfig:
+    enabled: bool = True
+    timeout_seconds: float = 120.0
+    ssid: str = "RabbitDetector"
+    password: str = "rabbitdet"  # min 8 chars required by WPA2
+
+
+@dataclass
 class AudioConfig:
     sounds_dir: str
     volume: float
@@ -68,6 +76,7 @@ class Config:
     clip: ClipConfig
     audio: AudioConfig
     email: EmailConfig
+    hotspot: HotspotConfig
     log_detections: bool
     log_dir: str
 
@@ -87,6 +96,7 @@ def load_config(path: str | Path | None = None) -> Config:
     c = raw.get("clip", {})
     a = raw.get("audio", {})
     e = raw.get("email", {})
+    h = raw.get("hotspot", {})
 
     return Config(
         detection=DetectionConfig(
@@ -122,6 +132,12 @@ def load_config(path: str | Path | None = None) -> Config:
             from_addr=e.get("from_addr", ""),
             to_addr=e.get("to_addr", ""),
             cooldown_seconds=int(e.get("cooldown_seconds", 300)),
+        ),
+        hotspot=HotspotConfig(
+            enabled=bool(h.get("enabled", True)),
+            timeout_seconds=float(h.get("timeout_seconds", 120.0)),
+            ssid=h.get("ssid", "RabbitDetector"),
+            password=h.get("password", "rabbitdet"),
         ),
         log_detections=bool(raw.get("log_detections", True)),
         log_dir=raw.get("log_dir", "data/logs"),

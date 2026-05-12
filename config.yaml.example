@@ -48,5 +48,13 @@ server_app:
   frames_dir: data/server-frames
   max_frames: 5000
 
+hotspot:
+  # If no WiFi IP is obtained within timeout_seconds of boot, create an AP so
+  # you can SSH in and fix the network config. Pi address in hotspot mode: 192.168.4.1
+  enabled: true
+  timeout_seconds: 120
+  ssid: "RabbitDetector"
+  password: "rabbitdet"  # must be 8+ characters
+
 log_detections: true
 log_dir: data/logs
