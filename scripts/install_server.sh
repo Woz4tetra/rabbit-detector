@@ -6,6 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 VENV="$PROJECT_ROOT/server/.venv"
 
+echo "Installing system dependencies (libvips for Moondream2) ..."
+sudo apt-get update -qq
+sudo apt-get install -y libvips-dev
+
 echo "Creating server venv at $VENV ..."
 python3 -m venv "$VENV"
 

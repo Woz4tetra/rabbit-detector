@@ -125,10 +125,26 @@ class ServerClient:
     @staticmethod
     def encode_frame(frame: np.ndarray) -> bytes:
         import cv2
-        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        ok, buf = cv2.imencode(".jpg", _correct_ir_frame(frame), [cv2.IMWRITE_JPEG_QUALITY, 75])
         if not ok:
             raise RuntimeError("JPEG encode failed")
         return buf.tobytes()
+
+
+def _correct_ir_frame(frame: np.ndarray) -> np.ndarray:
+    """Convert IR-mode frames to grayscale.
+
+    When the IR-cut filter disengages at night the OV5647 sees only 850nm IR
+    light from the built-in LEDs. AWB produces a strong blue cast because it
+    assumes broadband illumination. Detecting IR mode by the blue/red ratio and
+    converting to grayscale gives Moondream2 a cleaner image.
+    """
+    import cv2
+    b, r = frame[:, :, 0].mean(), frame[:, :, 2].mean()
+    if r < 1 or b / r > 1.5:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    return frame
 
 
 class CameraClient:

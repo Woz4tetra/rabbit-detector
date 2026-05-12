@@ -9,14 +9,21 @@ def load_moondream(
     revision: str = "2025-01-09",
     device: str = "cuda:0",
 ):
-    """Load Moondream2 from HuggingFace. Pins the revision to avoid breaking API changes."""
-    tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
+    """Load Moondream2 from HuggingFace.
+
+    Avoids device_map= so that caching_allocator_warmup is never called —
+    that codepath hits an attribute the moondream custom code doesn't define.
+    Instead the model loads on CPU then moves to the target device.
+    """
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_id, revision=revision, trust_remote_code=True
+    )
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         revision=revision,
         trust_remote_code=True,
-        torch_dtype=torch.float16,
-        device_map=device,
+        low_cpu_mem_usage=True,
     )
+    model = model.to(device=device, dtype=torch.float16)
     model.eval()
     return model, tokenizer
