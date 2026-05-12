@@ -2,7 +2,7 @@
 
 ## What this is
 
-Raspberry Pi Zero W system that detects rabbits via a CSI camera, plays a deterrent sound, and emails a photo. Runs 24/7 on a 12V 6Ah battery (~6-7 days runtime).
+Raspberry Pi Zero W WiFi camera client + A6000 cluster inference server. The Pi captures frames and POSTs them to the server; the server runs Moondream2 to detect rabbits, sends email alerts, and serves a live web dashboard. The Pi plays audio locally and records short video clips to SD card on detection. Runs 24/7 on a 12V 6Ah battery (~6-7 days runtime).
 
 ## Hardware
 
@@ -18,8 +18,9 @@ Raspberry Pi Zero W system that detects rabbits via a CSI camera, plays a deterr
 | Task | Where |
 |------|-------|
 | `training/` scripts | A6000 cluster (3× GPUs, 48GB VRAM each) |
-| `src/rabbit_deterrent/` | Raspberry Pi Zero W |
-| `scripts/test_*.py` | Raspberry Pi Zero W |
+| `server/` | A6000 cluster (Moondream2 inference + web dashboard + email) |
+| `src/rabbit_deterrent/` | Raspberry Pi Zero W (camera capture, audio, clip recording) |
+| `scripts/test_*.py` | Raspberry Pi Zero W (except `test_server.py` — run anywhere) |
 | `scripts/deploy.sh` | Developer machine (rsyncs to Pi) |
 
 ## Deploying changes to the Pi
@@ -44,16 +45,21 @@ Pi IP: `192.168.50.252`
 ## Key commands
 
 ```bash
-# Training (on A6000 cluster)
-pip install -r training/requirements.txt
-ROBOFLOW_API_KEY=<key> python training/download_dataset.py
-python training/train.py                  # DDP across 3 GPUs, ~5 min
-python training/validate.py               # check mAP50 > 0.80
-python training/export_onnx.py            # writes data/models/rabbit_detector.onnx
+# Server: one-time setup on A6000 cluster
+cp config.yaml.example config.yaml        # fill in email credentials and server_app.device
+bash scripts/install_server.sh            # creates server/.venv, downloads Moondream2 (~4 GB)
+bash scripts/install_server_service.sh    # installs systemd service
 
-# Deploy to Pi
-cp config.yaml.example config.yaml        # fill in email credentials
-PI_HOST=raspberrypi.local bash scripts/deploy.sh
+# Server: start manually (dev/test)
+server/.venv/bin/uvicorn server.server:app --host 0.0.0.0 --port 8000 --workers 1
+
+# Server: test endpoints
+python scripts/test_server.py --url http://localhost:8000
+python scripts/test_server.py --url http://localhost:8000 --image /path/to/rabbit.jpg
+
+# Server: service monitoring
+journalctl -u rabbit-server -f
+sudo systemctl restart rabbit-server
 
 # Pi: one-time setup (then reboot)
 bash scripts/optimize_pi.sh
@@ -63,7 +69,6 @@ bash scripts/install_service.sh
 # Pi: hardware verification
 python scripts/test_camera.py             # saves /tmp/test_frame.jpg
 python scripts/test_audio.py              # plays deterrent.wav
-python scripts/test_detector.py --image <rabbit.jpg>
 python scripts/test_notify.py             # sends test email
 
 # Pi: service monitoring
@@ -98,11 +103,8 @@ USB speaker hardware spec (USB2.0 Device, card 1): S16_LE, 48000 Hz, stereo only
 - `config.yaml` is **gitignored**. It holds real email credentials.
 - `config.yaml.example` is the checked-in template.
 - All paths in config are resolved relative to the project root by `Config.resolved_*` methods.
-- `detection.image_size` (default 320) must match the `imgsz` used in `export_onnx.py`. Changing one without the other degrades accuracy.
-
-## ONNX model output format
-
-The model is exported with `end2end=False` (raw anchors, not decoded boxes). `detector.py` applies NMS manually via `cv2.dnn.NMSBoxes`. Output tensor shape: `[1, num_classes+4, num_anchors]`. Transposing to `[num_anchors, num_classes+4]` before processing. Export uses opset=12 for compatibility with OpenCV 4.5.x; 4.10.0 on Trixie supports higher opsets too.
+- Pi reads: `detection`, `server`, `clip`, `audio`, `email`, `log_detections`, `log_dir`
+- Server reads: `email`, `server_app` (everything else is ignored by the server)
 
 ## State persistence
 
@@ -129,12 +131,13 @@ All power calls are non-fatal (logged as warnings on failure). The `/boot/firmwa
 
 ## Detection loop timing
 
-| State | Sleep | Inference | Effective cycle |
-|-------|-------|-----------|----------------|
-| `SCANNING` | 30s | ~24s | ~54s per check |
-| `ALERT` | none | ~24s | ~24s per check |
+| State | Poll interval | Server round-trip | Effective cycle |
+|-------|--------------|-------------------|----------------|
+| `SCANNING` | 2s | ~1–2s | ~2–4s per check |
+| `ALERT` | 1s | ~1–2s | ~1–2s per check |
+| `OFFLINE` | retry_delay_seconds (5s) | — | health-check only |
 
-ALERT has no sleep — inference is the bottleneck. The system returns from `ALERT` to `SCANNING` after 3 consecutive clear frames (~72s at 24s/frame).
+The system returns from `ALERT` to `SCANNING` after 3 consecutive clear responses.
 
 ## Rabbit deterrent sound research
 
@@ -160,4 +163,4 @@ ALERT has no sleep — inference is the bottleneck. The system returns from `ALE
 
 ## Inference performance target
 
-`test_detector.py` warns if inference exceeds 5 or 30 seconds. On the Pi Zero W (ARMv6, single-core, `cv2.dnn`), expect 15-60 seconds per frame at `image_size=320`. The ARMv6 has no NEON SIMD, so there is no fast path for convolution. This means the ALERT-state 5-second polling interval will be exceeded; the system simply runs as fast as it can. Verify imgsz=320 in both `export_onnx.py` and `config.yaml`.
+Moondream2 on a single A6000 GPU: ~0.3–0.8s per frame. Total server round-trip including network: ~1–2s. The Pi no longer does local inference.

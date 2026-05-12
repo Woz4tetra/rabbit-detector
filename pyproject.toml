@@ -18,6 +18,18 @@ dependencies = [
 pi = [
     "picamera2",
 ]
+server = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "python-multipart>=0.0.9",
+    "Pillow>=10.0.0",
+    "torch>=2.2.0",
+    "transformers>=4.39.0",
+    "accelerate>=0.28.0",
+    "einops>=0.7.0",
+    "opencv-python-headless>=4.8.0",
+    "numpy>=1.24.0",
+]
 training = [
     "ultralytics>=8.0.0",
     "roboflow>=1.1.0",

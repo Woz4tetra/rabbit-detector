@@ -1,0 +1,19 @@
+[Unit]
+Description=Rabbit Detector Moondream2 Inference Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=__PROJECT_ROOT__
+ExecStart=__PROJECT_ROOT__/server/.venv/bin/uvicorn server.server:app --host 0.0.0.0 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=30
+SyslogIdentifier=rabbit-server
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,15 +11,31 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 @dataclass
 class DetectionConfig:
-    model_path: str
     confidence_threshold: float
-    image_size: int
     capture_width: int
     capture_height: int
-    frame_rate: float  # camera stream fps during ALERT; also sets video output fps
+    scanning_interval_seconds: float  # pause between server queries in SCANNING state
+    alert_poll_interval_seconds: float  # pause between server queries in ALERT state
 
-    def resolved_model_path(self) -> Path:
-        p = Path(self.model_path)
+
+@dataclass
+class ServerConfig:
+    url: str  # e.g. "http://192.168.50.XXX:8000"
+    timeout_seconds: float = 10.0
+    max_failures: int = 5  # consecutive failures before entering OFFLINE mode
+    retry_delay_seconds: float = 5.0
+
+
+@dataclass
+class ClipConfig:
+    enabled: bool
+    clip_dir: str
+    max_clips: int  # 0 = unlimited; prune oldest when exceeded
+    pre_roll_frames: int  # frames buffered before detection starts
+    max_clip_seconds: float  # hard stop per clip
+
+    def resolved_clip_dir(self) -> Path:
+        p = Path(self.clip_dir)
         return p if p.is_absolute() else PROJECT_ROOT / p
 
 
@@ -47,28 +62,12 @@ class EmailConfig:
 
 
 @dataclass
-class StorageConfig:
-    save_images: bool
-    image_dir: str
-    max_images: int  # 0 = unlimited
-    save_video: bool
-    video_dir: str
-
-    def resolved_image_dir(self) -> Path:
-        p = Path(self.image_dir)
-        return p if p.is_absolute() else PROJECT_ROOT / p
-
-    def resolved_video_dir(self) -> Path:
-        p = Path(self.video_dir)
-        return p if p.is_absolute() else PROJECT_ROOT / p
-
-
-@dataclass
 class Config:
     detection: DetectionConfig
+    server: ServerConfig
+    clip: ClipConfig
     audio: AudioConfig
     email: EmailConfig
-    storage: StorageConfig
     log_detections: bool
     log_dir: str
 
@@ -83,23 +82,36 @@ def load_config(path: str | Path | None = None) -> Config:
     with open(path) as f:
         raw = yaml.safe_load(f)
 
-    d = raw["detection"]
-    a = raw["audio"]
-    e = raw["email"]
-    s = raw.get("storage", {})
+    d = raw.get("detection", {})
+    s = raw.get("server", {})
+    c = raw.get("clip", {})
+    a = raw.get("audio", {})
+    e = raw.get("email", {})
 
     return Config(
         detection=DetectionConfig(
-            model_path=d["model_path"],
-            confidence_threshold=float(d["confidence_threshold"]),
-            image_size=int(d["image_size"]),
-            capture_width=int(d["capture_width"]),
-            capture_height=int(d["capture_height"]),
-            frame_rate=float(d.get("frame_rate", 1.0)),
+            confidence_threshold=float(d.get("confidence_threshold", 0.5)),
+            capture_width=int(d.get("capture_width", 640)),
+            capture_height=int(d.get("capture_height", 480)),
+            scanning_interval_seconds=float(d.get("scanning_interval_seconds", 2.0)),
+            alert_poll_interval_seconds=float(d.get("alert_poll_interval_seconds", 1.0)),
+        ),
+        server=ServerConfig(
+            url=s["url"],
+            timeout_seconds=float(s.get("timeout_seconds", 10.0)),
+            max_failures=int(s.get("max_failures", 5)),
+            retry_delay_seconds=float(s.get("retry_delay_seconds", 5.0)),
+        ),
+        clip=ClipConfig(
+            enabled=bool(c.get("enabled", True)),
+            clip_dir=c.get("clip_dir", "data/clips"),
+            max_clips=int(c.get("max_clips", 50)),
+            pre_roll_frames=int(c.get("pre_roll_frames", 3)),
+            max_clip_seconds=float(c.get("max_clip_seconds", 120.0)),
         ),
         audio=AudioConfig(
             sounds_dir=a.get("sounds_dir", "data/sounds"),
-            volume=float(a["volume"]),
+            volume=float(a.get("volume", 0.9)),
         ),
         email=EmailConfig(
             enabled=bool(e.get("enabled", True)),
@@ -110,13 +122,6 @@ def load_config(path: str | Path | None = None) -> Config:
             from_addr=e.get("from_addr", ""),
             to_addr=e.get("to_addr", ""),
             cooldown_seconds=int(e.get("cooldown_seconds", 300)),
-        ),
-        storage=StorageConfig(
-            save_images=bool(s.get("save_images", False)),
-            image_dir=s.get("image_dir", "data/images"),
-            max_images=int(s.get("max_images", 1000)),
-            save_video=bool(s.get("save_video", False)),
-            video_dir=s.get("video_dir", "data/videos"),
         ),
         log_detections=bool(raw.get("log_detections", True)),
         log_dir=raw.get("log_dir", "data/logs"),
