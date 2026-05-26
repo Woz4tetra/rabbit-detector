@@ -1,11 +1,6 @@
 config.yaml
 
-data/models/*.onnx
-data/models/*.pt
-data/logs/
-data/sounds/
-data/images/
-data/videos/
+data/
 
 training/runs/
 training/data/
