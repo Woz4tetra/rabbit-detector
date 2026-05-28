@@ -20,11 +20,14 @@ class CameraCapture:
         cam = Picamera2()
         # Picamera2 "RGB888" on OV5647/Trixie yields BGR byte order — the format name
         # is misleading but the raw array is directly usable by cv2 without conversion.
+        # FrameDurationLimits allows up to 1s exposure so AE can use long shutter at night.
         config = cam.create_still_configuration(
-            main={"size": (self.width, self.height), "format": "RGB888"}
+            main={"size": (self.width, self.height), "format": "RGB888"},
+            controls={"FrameDurationLimits": (33333, 1000000)},
         )
         cam.configure(config)
         cam.start()
+        cam.capture_array()  # discard: let AE settle before the real shot
         frame = cam.capture_array()
         cam.stop()
         cam.close()

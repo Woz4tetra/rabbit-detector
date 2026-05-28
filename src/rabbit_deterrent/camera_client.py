@@ -132,17 +132,20 @@ class ServerClient:
 
 
 def _correct_ir_frame(frame: np.ndarray) -> np.ndarray:
-    """Convert IR-mode frames to grayscale.
+    """Convert IR-mode frames to grayscale with contrast enhancement.
 
     When the IR-cut filter disengages at night the OV5647 sees only 850nm IR
     light from the built-in LEDs. AWB produces a strong blue cast because it
     assumes broadband illumination. Detecting IR mode by the blue/red ratio and
-    converting to grayscale gives Moondream2 a cleaner image.
+    converting to grayscale gives Moondream2 a cleaner image. CLAHE then boosts
+    local contrast so detail is visible despite weak IR illumination.
     """
     import cv2
     b, r = frame[:, :, 0].mean(), frame[:, :, 2].mean()
     if r < 1 or b / r > 1.5:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        gray = clahe.apply(gray)
         return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     return frame
 
