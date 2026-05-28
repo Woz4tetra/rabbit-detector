@@ -229,9 +229,9 @@ async def dashboard():
             continue
         frame = d.get("frame", "")
         data_attr = f'data-frame="{frame}"' if frame else ""
-        cursor = "cursor:pointer" if frame else ""
+        dim = "" if frame else " no-frame-row"
         rows += (
-            f'<tr class="det-row" {data_attr} style="{cursor}">'
+            f'<tr class="det-row{dim}" {data_attr} style="cursor:pointer">'
             f'<td>{d.get("timestamp", "")}</td>'
             f'<td>{"Rabbit detected" if d.get("rabbit_present") else "Clear"}</td>'
             f'</tr>\n'
@@ -277,8 +277,10 @@ async def dashboard():
   th {{ background: #0f3460; padding: 8px 12px; text-align: left; color: #aaa;
         text-transform: uppercase; font-size: 0.8em; letter-spacing: 0.5px; }}
   td {{ padding: 7px 12px; border-top: 1px solid #0f3460; }}
+  tr.det-row {{ cursor: pointer; }}
   tr.det-row:hover td {{ background: #0f3460; }}
   tr.det-row.selected td {{ background: #1a3a60; border-left: 3px solid #ff6b6b; }}
+  tr.no-frame-row td {{ color: #777; }}
   @media (max-width: 700px) {{
     .frames {{ flex-direction: column; }}
   }}
@@ -326,16 +328,21 @@ async def dashboard():
     document.getElementById('det-tbody').addEventListener('click', function(e) {{
       var row = e.target.closest('tr.det-row');
       if (!row) return;
-      var frame = row.getAttribute('data-frame');
-      if (!frame) return;
       if (selected) selected.classList.remove('selected');
       row.classList.add('selected');
       selected = row;
+      var frame = row.getAttribute('data-frame');
       var ts = row.cells[0] ? row.cells[0].textContent : '';
       detLabel.textContent = ts ? 'Detection: ' + ts : 'Selected Detection';
-      detImg.src = '/frame/' + frame + '?t=' + Date.now();
-      detImg.style.display = 'block';
-      detPh.style.display = 'none';
+      if (frame) {{
+        detImg.src = '/frame/' + frame + '?t=' + Date.now();
+        detImg.style.display = 'block';
+        detPh.style.display = 'none';
+      }} else {{
+        detImg.style.display = 'none';
+        detPh.textContent = 'No image saved for this detection';
+        detPh.style.display = 'block';
+      }}
     }});
 
     var statusEl = document.querySelector('.status');
@@ -353,9 +360,9 @@ async def dashboard():
         var html = '';
         data.detections.forEach(function(d) {{
           var attr = d.frame ? ' data-frame="' + d.frame + '"' : '';
-          var cursor = d.frame ? 'cursor:pointer' : '';
+          var dim = d.frame ? '' : ' no-frame-row';
           var sel = (selected && selected.getAttribute('data-frame') === d.frame) ? ' selected' : '';
-          html += '<tr class="det-row' + sel + '"' + attr + ' style="' + cursor + '"><td>' + d.timestamp + '</td><td>' + (d.rabbit_present ? 'Rabbit detected' : 'Clear') + '</td></tr>';
+          html += '<tr class="det-row' + dim + sel + '"' + attr + ' style="cursor:pointer"><td>' + d.timestamp + '</td><td>' + (d.rabbit_present ? 'Rabbit detected' : 'Clear') + '</td></tr>';
         }});
         tbody.innerHTML = html;
       }}).catch(function() {{}});
