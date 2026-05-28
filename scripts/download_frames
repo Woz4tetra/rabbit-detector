@@ -1,0 +1,2 @@
+#!/bin/bash
+rsync --progress -av -e "ssh -J ben@megamind -i ~/.ssh/pathfinder" ben@192.168.1.174:/home/ben/rabbit-detector/data/clips/ /home/ben/rabbit-detector/data/clips/
