@@ -38,6 +38,7 @@ def main() -> None:
     camera = CameraCapture(
         width=config.detection.capture_width,
         height=config.detection.capture_height,
+        max_exposure_seconds=config.camera.max_exposure_seconds,
     )
     audio = AudioPlayer(
         sounds_dir=config.audio.resolved_sounds_dir(),

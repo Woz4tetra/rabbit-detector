@@ -8,9 +8,10 @@ logger = logging.getLogger(__name__)
 
 
 class CameraCapture:
-    def __init__(self, width: int, height: int) -> None:
+    def __init__(self, width: int, height: int, max_exposure_seconds: float = 3.0) -> None:
         self.width = width
         self.height = height
+        self._max_exposure_us = int(max_exposure_seconds * 1_000_000)
         self._cam = None
 
     def capture(self) -> np.ndarray:
@@ -20,10 +21,11 @@ class CameraCapture:
         cam = Picamera2()
         # Picamera2 "RGB888" on OV5647/Trixie yields BGR byte order — the format name
         # is misleading but the raw array is directly usable by cv2 without conversion.
-        # FrameDurationLimits allows up to 1s exposure so AE can use long shutter at night.
+        # FrameDurationLimits sets the AE ceiling. AE uses shorter exposures in daylight
+        # automatically, so a high max (e.g. 3s) does not slow down daytime captures.
         config = cam.create_still_configuration(
             main={"size": (self.width, self.height), "format": "RGB888"},
-            controls={"FrameDurationLimits": (33333, 1000000)},
+            controls={"FrameDurationLimits": (33333, self._max_exposure_us)},
         )
         cam.configure(config)
         cam.start()

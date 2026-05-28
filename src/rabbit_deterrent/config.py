@@ -10,6 +10,11 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
 @dataclass
+class CameraConfig:
+    max_exposure_seconds: float = 3.0  # AE ceiling; AE uses less in daylight automatically
+
+
+@dataclass
 class DetectionConfig:
     confidence_threshold: float
     capture_width: int
@@ -78,6 +83,7 @@ class Config:
     audio: AudioConfig
     email: EmailConfig
     hotspot: HotspotConfig
+    camera: CameraConfig
     log_detections: bool
     log_dir: str
 
@@ -98,6 +104,7 @@ def load_config(path: str | Path | None = None) -> Config:
     a = raw.get("audio", {})
     e = raw.get("email", {})
     h = raw.get("hotspot", {})
+    cam = raw.get("camera", {})
 
     return Config(
         detection=DetectionConfig(
@@ -140,6 +147,9 @@ def load_config(path: str | Path | None = None) -> Config:
             timeout_seconds=float(h.get("timeout_seconds", 120.0)),
             ssid=h.get("ssid", "RabbitDetector"),
             password=h.get("password", "rabbitdet"),
+        ),
+        camera=CameraConfig(
+            max_exposure_seconds=float(cam.get("max_exposure_seconds", 3.0)),
         ),
         log_detections=bool(raw.get("log_detections", True)),
         log_dir=raw.get("log_dir", "data/logs"),
