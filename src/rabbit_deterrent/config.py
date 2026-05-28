@@ -95,13 +95,32 @@ class Config:
     audio: AudioConfig
     email: EmailConfig
     hotspot: HotspotConfig
-    camera: CameraConfig
+    camera_day: CameraConfig
+    camera_night: CameraConfig
     log_detections: bool
     log_dir: str
 
     def resolved_log_dir(self) -> Path:
         p = Path(self.log_dir)
         return p if p.is_absolute() else PROJECT_ROOT / p
+
+
+def _load_camera_profile(section: dict) -> CameraConfig:
+    return CameraConfig(
+        max_exposure_seconds=float(section.get("max_exposure_seconds", 3.0)),
+        ae_enable=bool(section.get("ae_enable", True)),
+        exposure_time_us=int(section.get("exposure_time_us", 20000)),
+        analogue_gain=float(section.get("analogue_gain", 1.0)),
+        awb_enable=bool(section.get("awb_enable", True)),
+        awb_mode=int(section.get("awb_mode", 0)),
+        red_gain=float(section.get("red_gain", 1.5)),
+        blue_gain=float(section.get("blue_gain", 1.5)),
+        brightness=float(section.get("brightness", 0.0)),
+        contrast=float(section.get("contrast", 1.0)),
+        saturation=float(section.get("saturation", 1.0)),
+        sharpness=float(section.get("sharpness", 1.0)),
+        noise_reduction_mode=int(section.get("noise_reduction_mode", 1)),
+    )
 
 
 def load_config(path: str | Path | None = None) -> Config:
@@ -116,7 +135,8 @@ def load_config(path: str | Path | None = None) -> Config:
     a = raw.get("audio", {})
     e = raw.get("email", {})
     h = raw.get("hotspot", {})
-    cam = raw.get("camera", {})
+    cam_day = raw.get("camera_day", {})
+    cam_night = raw.get("camera_night", {})
 
     return Config(
         detection=DetectionConfig(
@@ -160,21 +180,8 @@ def load_config(path: str | Path | None = None) -> Config:
             ssid=h.get("ssid", "RabbitDetector"),
             password=h.get("password", "rabbitdet"),
         ),
-        camera=CameraConfig(
-            max_exposure_seconds=float(cam.get("max_exposure_seconds", 3.0)),
-            ae_enable=bool(cam.get("ae_enable", True)),
-            exposure_time_us=int(cam.get("exposure_time_us", 20000)),
-            analogue_gain=float(cam.get("analogue_gain", 1.0)),
-            awb_enable=bool(cam.get("awb_enable", True)),
-            awb_mode=int(cam.get("awb_mode", 0)),
-            red_gain=float(cam.get("red_gain", 1.5)),
-            blue_gain=float(cam.get("blue_gain", 1.5)),
-            brightness=float(cam.get("brightness", 0.0)),
-            contrast=float(cam.get("contrast", 1.0)),
-            saturation=float(cam.get("saturation", 1.0)),
-            sharpness=float(cam.get("sharpness", 1.0)),
-            noise_reduction_mode=int(cam.get("noise_reduction_mode", 1)),
-        ),
+        camera_day=_load_camera_profile(cam_day),
+        camera_night=_load_camera_profile(cam_night),
         log_detections=bool(raw.get("log_detections", True)),
         log_dir=raw.get("log_dir", "data/logs"),
     )
