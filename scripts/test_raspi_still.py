@@ -7,9 +7,10 @@ actually produces" without the Python pipeline in the way.
 
 Run on the Pi. Output is a JPEG you can scp back for visual inspection.
 
-    python scripts/test_raspi_still.py                       # uses config.yaml
+    python scripts/test_raspi_still.py                          # night profile
+    python scripts/test_raspi_still.py --profile day            # day profile
     python scripts/test_raspi_still.py --output /tmp/x.jpg
-    python scripts/test_raspi_still.py --shutter 2000000     # override exposure
+    python scripts/test_raspi_still.py --shutter 2000000        # override exposure
 """
 from __future__ import annotations
 
@@ -41,8 +42,11 @@ DENOISE_MODES = {
 }
 
 
-def build_command(cfg: dict, output: Path, shutter_override: int | None, gain_override: float | None) -> list[str]:
-    camera = cfg.get("camera", {})
+def build_command(cfg: dict, profile: str, output: Path, shutter_override: int | None, gain_override: float | None) -> list[str]:
+    profile_key = f"camera_{profile}"
+    camera = cfg.get(profile_key)
+    if camera is None:
+        raise SystemExit(f"config.yaml is missing section '{profile_key}'")
     detection = cfg.get("detection", {})
 
     width = int(detection.get("capture_width", 1280))
@@ -98,6 +102,7 @@ def build_command(cfg: dict, output: Path, shutter_override: int | None, gain_ov
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--profile", choices=["day", "night"], default="night", help="which camera_<profile> section to read (default: night)")
     p.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help="config.yaml path (default: project root)")
     p.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help=f"output JPEG path (default: {DEFAULT_OUTPUT})")
     p.add_argument("--shutter", type=int, default=None, help="override exposure_time_us (forces AE off)")
@@ -107,7 +112,7 @@ def main() -> int:
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
-    cmd = build_command(cfg, args.output, args.shutter, args.gain)
+    cmd = build_command(cfg, args.profile, args.output, args.shutter, args.gain)
     print("$", " ".join(cmd))
     result = subprocess.run(cmd)
     if result.returncode != 0:
