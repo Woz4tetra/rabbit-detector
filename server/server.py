@@ -17,7 +17,23 @@ from fastapi.responses import HTMLResponse, Response
 from PIL import Image
 from pydantic import BaseModel
 
+from zoneinfo import ZoneInfo
+
 from .config import PROJECT_ROOT, ServerSettings, load_server_settings
+
+_EASTERN = ZoneInfo("America/New_York")
+
+
+def _fmt_ts(ts: str) -> str:
+    if not ts:
+        return ts
+    try:
+        dt = datetime.datetime.fromisoformat(ts.rstrip("Z")).replace(
+            tzinfo=datetime.timezone.utc
+        )
+        return dt.astimezone(_EASTERN).strftime("%Y-%m-%d %H:%M:%S ET")
+    except ValueError:
+        return ts
 from .moondream_loader import load_moondream
 
 logger = logging.getLogger(__name__)
@@ -203,11 +219,11 @@ async def get_frame(name: str):
 async def api_state():
     if _recent_frames:
         last = _recent_frames[-1]
-        status_text = f'RABBIT DETECTED at {last["timestamp"]}' if last["rabbit_present"] else f'Clear at {last["timestamp"]}'
+        status_text = f'RABBIT DETECTED at {_fmt_ts(last["timestamp"])}' if last["rabbit_present"] else f'Clear at {_fmt_ts(last["timestamp"])}'
         status_color = "#ff6b6b" if last["rabbit_present"] else "#51cf66"
     elif _rabbit_detections:
         last = _rabbit_detections[-1]
-        status_text = f'Last rabbit: {last["timestamp"]}'
+        status_text = f'Last rabbit: {_fmt_ts(last["timestamp"])}'
         status_color = "#ff6b6b"
     else:
         status_text, status_color = "Waiting for first frame…", "#888"
@@ -232,18 +248,18 @@ async def dashboard():
         dim = "" if frame else " no-frame-row"
         rows += (
             f'<tr class="det-row{dim}" {data_attr} style="cursor:pointer">'
-            f'<td>{d.get("timestamp", "")}</td>'
+            f'<td>{_fmt_ts(d.get("timestamp", ""))}</td>'
             f'<td>{"Rabbit detected" if d.get("rabbit_present") else "Clear"}</td>'
             f'</tr>\n'
         )
 
     if _recent_frames:
         last = _recent_frames[-1]
-        status_text = f'RABBIT DETECTED at {last["timestamp"]}' if last["rabbit_present"] else f'Clear at {last["timestamp"]}'
+        status_text = f'RABBIT DETECTED at {_fmt_ts(last["timestamp"])}' if last["rabbit_present"] else f'Clear at {_fmt_ts(last["timestamp"])}'
         status_color = "#ff6b6b" if last["rabbit_present"] else "#51cf66"
     elif _rabbit_detections:
         last = _rabbit_detections[-1]
-        status_text = f'Last rabbit: {last["timestamp"]}'
+        status_text = f'Last rabbit: {_fmt_ts(last["timestamp"])}'
         status_color = "#ff6b6b"
     else:
         status_text, status_color = "Waiting for first frame…", "#888"
@@ -308,6 +324,16 @@ async def dashboard():
 </table>
 <script>
   (function() {{
+    function fmtTs(utcStr) {{
+      try {{
+        return new Date(utcStr).toLocaleString('en-US', {{
+          timeZone: 'America/New_York',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          hour12: false
+        }}) + ' ET';
+      }} catch(e) {{ return utcStr; }}
+    }}
     var liveImg = document.getElementById('live');
     var livePh = document.getElementById('live-placeholder');
     setInterval(function() {{
@@ -362,7 +388,7 @@ async def dashboard():
           var attr = d.frame ? ' data-frame="' + d.frame + '"' : '';
           var dim = d.frame ? '' : ' no-frame-row';
           var sel = (selected && selected.getAttribute('data-frame') === d.frame) ? ' selected' : '';
-          html += '<tr class="det-row' + dim + sel + '"' + attr + ' style="cursor:pointer"><td>' + d.timestamp + '</td><td>' + (d.rabbit_present ? 'Rabbit detected' : 'Clear') + '</td></tr>';
+          html += '<tr class="det-row' + dim + sel + '"' + attr + ' style="cursor:pointer"><td>' + fmtTs(d.timestamp) + '</td><td>' + (d.rabbit_present ? 'Rabbit detected' : 'Clear') + '</td></tr>';
         }});
         tbody.innerHTML = html;
       }}).catch(function() {{}});
