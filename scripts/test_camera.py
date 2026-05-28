@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """Interactive camera tuner — keeps the camera open while you adjust settings live.
 
-Run on the Pi:
-    python scripts/test_camera.py [--width W] [--height H] [--port 7000]
+Reads config.yaml for default resolution and camera settings. Run on the Pi:
+    python scripts/test_camera.py [--port 7000]
 
-Then open http://<pi-ip>:7000 in a browser. Sliders for every picamera2 control
-update the camera instantly without restart. "Save frame" downloads the current frame.
+Then open http://<pi-ip>:7000 in a browser.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import socket
 import sys
@@ -44,7 +42,12 @@ def capture_loop() -> None:
             if not ok:
                 continue
 
-            cg = meta.get("ColourGains", (1.0, 1.0))
+            raw_cg = meta.get("ColourGains")
+            try:
+                cg = [round(float(raw_cg[0]), 3), round(float(raw_cg[1]), 3)]
+            except (TypeError, IndexError):
+                cg = [1.0, 1.0]
+
             with _lock:
                 _jpeg = buf.tobytes()
                 _stats = {
@@ -53,16 +56,17 @@ def capture_loop() -> None:
                     "std": round(float(frame.std()), 1),
                     "exposure_us": int(meta.get("ExposureTime", 0)),
                     "gain": round(float(meta.get("AnalogueGain", 1.0)), 2),
-                    "colour_gains": [round(float(cg[0]), 3), round(float(cg[1]), 3)],
+                    "colour_gains": cg,
                     "lux": round(float(meta.get("Lux", 0.0)), 1),
                 }
         except Exception as exc:
             print(f"capture error: {exc}")
             time.sleep(0.5)
 
-# ─── HTML ─────────────────────────────────────────────────────────────────────
+# ─── HTML template ────────────────────────────────────────────────────────────
+# __CFG__ is replaced at startup with a JSON object of initial values from config.yaml
 
-_HTML = """\
+_HTML_TEMPLATE = """\
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,7 +86,7 @@ h1 { color: #e94560; padding: 10px 16px; font-size: 1.2em; border-bottom: 1px so
 .row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .row:last-child { margin-bottom: 0; }
 .row label { width: 90px; font-size: 0.78em; color: #bbb; flex-shrink: 0; }
-.row .val { width: 68px; font-size: 0.76em; color: #e94560; text-align: right; flex-shrink: 0; font-weight: bold; }
+.row .val { width: 72px; font-size: 0.76em; color: #e94560; text-align: right; flex-shrink: 0; font-weight: bold; white-space: nowrap; overflow: hidden; }
 input[type=range] { flex: 1; accent-color: #e94560; min-width: 0; }
 input[type=checkbox] { accent-color: #e94560; width: 15px; height: 15px; flex-shrink: 0; }
 select { background: #0f3460; color: #e0e0e0; border: 1px solid #1a3a60; padding: 2px 5px; border-radius: 3px; font-family: monospace; font-size: 0.78em; }
@@ -104,24 +108,24 @@ button:hover { background: #c73652; }
       <h3>Exposure</h3>
       <div class="row">
         <label>Auto</label>
-        <input type="checkbox" id="ae" checked onchange="onAe()">
+        <input type="checkbox" id="ae">
       </div>
       <div id="exp-group">
         <div class="row">
-          <label>Exp (&#x03bc;s)</label>
-          <input type="range" id="exp" min="2" max="6.5" step="0.005" value="4.3" oninput="onLog('exp','exp-val','&#x03bc;s')">
-          <span class="val" id="exp-val">20000&#x03bc;s</span>
+          <label>Exp (&mu;s)</label>
+          <input type="range" id="exp" min="2" max="6.5" step="0.005">
+          <span class="val" id="exp-val"></span>
         </div>
         <div class="row">
           <label>Gain</label>
-          <input type="range" id="gain" min="1" max="16" step="0.1" value="1" oninput="onSlider('gain','gain-val','x')">
-          <span class="val" id="gain-val">1.0x</span>
+          <input type="range" id="gain" min="1" max="16" step="0.1">
+          <span class="val" id="gain-val"></span>
         </div>
       </div>
       <div class="row" title="Maximum exposure the AE algorithm may use">
         <label>AE max exp</label>
-        <input type="range" id="maxexp" min="2" max="6.5" step="0.005" value="6.477" oninput="onLog('maxexp','maxexp-val','&#x03bc;s')">
-        <span class="val" id="maxexp-val">3000k&#x03bc;s</span>
+        <input type="range" id="maxexp" min="2" max="6.5" step="0.005">
+        <span class="val" id="maxexp-val"></span>
       </div>
     </div>
 
@@ -129,11 +133,11 @@ button:hover { background: #c73652; }
       <h3>White Balance</h3>
       <div class="row">
         <label>Auto</label>
-        <input type="checkbox" id="awb" checked onchange="onAwb()">
+        <input type="checkbox" id="awb">
       </div>
       <div class="row">
         <label>AWB mode</label>
-        <select id="awb-mode" onchange="apply()">
+        <select id="awb-mode">
           <option value="0">Auto</option>
           <option value="1">Incandescent</option>
           <option value="2">Tungsten</option>
@@ -146,13 +150,13 @@ button:hover { background: #c73652; }
       <div id="gains-group">
         <div class="row">
           <label>Red gain</label>
-          <input type="range" id="rgain" min="0.5" max="4" step="0.01" value="1.5" oninput="onSlider('rgain','rgain-val','')">
-          <span class="val" id="rgain-val">1.50</span>
+          <input type="range" id="rgain" min="0.5" max="4" step="0.01">
+          <span class="val" id="rgain-val"></span>
         </div>
         <div class="row">
           <label>Blue gain</label>
-          <input type="range" id="bgain" min="0.5" max="4" step="0.01" value="1.5" oninput="onSlider('bgain','bgain-val','')">
-          <span class="val" id="bgain-val">1.50</span>
+          <input type="range" id="bgain" min="0.5" max="4" step="0.01">
+          <span class="val" id="bgain-val"></span>
         </div>
       </div>
     </div>
@@ -161,189 +165,252 @@ button:hover { background: #c73652; }
       <h3>Image</h3>
       <div class="row">
         <label>Brightness</label>
-        <input type="range" id="brightness" min="-1" max="1" step="0.01" value="0" oninput="onSlider('brightness','brightness-val','')">
-        <span class="val" id="brightness-val">0.00</span>
+        <input type="range" id="brightness" min="-1" max="1" step="0.01">
+        <span class="val" id="brightness-val"></span>
       </div>
       <div class="row">
         <label>Contrast</label>
-        <input type="range" id="contrast" min="0" max="32" step="0.1" value="1" oninput="onSlider('contrast','contrast-val','')">
-        <span class="val" id="contrast-val">1.0</span>
+        <input type="range" id="contrast" min="0" max="32" step="0.1">
+        <span class="val" id="contrast-val"></span>
       </div>
       <div class="row">
         <label>Saturation</label>
-        <input type="range" id="saturation" min="0" max="32" step="0.1" value="1" oninput="onSlider('saturation','saturation-val','')">
-        <span class="val" id="saturation-val">1.0</span>
+        <input type="range" id="saturation" min="0" max="32" step="0.1">
+        <span class="val" id="saturation-val"></span>
       </div>
       <div class="row">
         <label>Sharpness</label>
-        <input type="range" id="sharpness" min="0" max="16" step="0.1" value="1" oninput="onSlider('sharpness','sharpness-val','')">
-        <span class="val" id="sharpness-val">1.0</span>
+        <input type="range" id="sharpness" min="0" max="16" step="0.1">
+        <span class="val" id="sharpness-val"></span>
       </div>
       <div class="row">
         <label>Denoise</label>
-        <select id="denoise" onchange="apply()">
+        <select id="denoise">
           <option value="0">Off</option>
-          <option value="1" selected>Fast</option>
+          <option value="1">Fast</option>
           <option value="2">High quality</option>
         </select>
       </div>
     </div>
 
-    <button onclick="saveFrame()">&#x1f4f7; Save frame</button>
+    <button id="save-btn">Save frame</button>
 
     <div class="group">
       <h3>Config YAML</h3>
       <textarea id="yaml-out" readonly rows="10" style="width:100%;background:#0f3460;color:#e0e0e0;border:none;border-radius:3px;padding:6px;font-family:monospace;font-size:0.74em;resize:vertical"></textarea>
-      <button onclick="copyYaml()" style="margin-top:4px">Copy</button>
+      <button id="copy-btn" style="margin-top:4px">Copy</button>
     </div>
 
   </div>
 </div>
 <script>
-let debounce = null;
+var CFG = __CFG__;
 
-// log-scale slider: slider value is log10(actual); range 2-6.5 = 100-3.16M
-function onLog(id, valId, unit) {
-  const v = Math.round(Math.pow(10, parseFloat(document.getElementById(id).value)));
-  document.getElementById(valId).textContent = v >= 100000 ? (v/1000).toFixed(0)+'k'+unit : v+unit;
-  apply();
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function el(id) { return document.getElementById(id); }
+
+// Log-scale helpers: slider value = log10(actual), range 2..6.5 = 100us..3.16Mus
+function logToActual(v) { return Math.round(Math.pow(10, parseFloat(v))); }
+function actualToLog(v) { return Math.log10(Math.max(100, v)).toFixed(4); }
+function fmtUs(us) { return us >= 100000 ? (us/1000).toFixed(0)+'kμs' : us+'μs'; }
+
+function setSlider(id, valId, value, fmt) {
+  el(id).value = value;
+  el(valId).textContent = fmt(value);
 }
 
-function logSliderFor(actual) {
-  return Math.log10(Math.max(100, actual)).toFixed(3);
-}
+// ── init sliders from config ──────────────────────────────────────────────────
 
-function logActual(id) {
-  return Math.round(Math.pow(10, parseFloat(document.getElementById(id).value)));
-}
+el('ae').checked = CFG.ae_enable;
+el('awb').checked = CFG.awb_enable;
+el('awb-mode').value = CFG.awb_mode;
+el('denoise').value = CFG.noise_reduction_mode;
 
-function onSlider(id, valId, unit) {
-  const v = parseFloat(document.getElementById(id).value);
-  document.getElementById(valId).textContent = v.toFixed(2) + unit;
-  apply();
-}
+el('exp').value = actualToLog(CFG.exposure_time_us);
+el('exp-val').textContent = fmtUs(CFG.exposure_time_us);
+el('gain').value = CFG.analogue_gain;
+el('gain-val').textContent = CFG.analogue_gain.toFixed(2)+'x';
+el('maxexp').value = actualToLog(CFG.max_exposure_seconds * 1e6);
+el('maxexp-val').textContent = fmtUs(CFG.max_exposure_seconds * 1e6);
+el('rgain').value = CFG.red_gain;
+el('rgain-val').textContent = CFG.red_gain.toFixed(3);
+el('bgain').value = CFG.blue_gain;
+el('bgain-val').textContent = CFG.blue_gain.toFixed(3);
+el('brightness').value = CFG.brightness;
+el('brightness-val').textContent = CFG.brightness.toFixed(2);
+el('contrast').value = CFG.contrast;
+el('contrast-val').textContent = CFG.contrast.toFixed(1);
+el('saturation').value = CFG.saturation;
+el('saturation-val').textContent = CFG.saturation.toFixed(1);
+el('sharpness').value = CFG.sharpness;
+el('sharpness-val').textContent = CFG.sharpness.toFixed(1);
 
-function onAe() {
-  const on = document.getElementById('ae').checked;
-  document.getElementById('exp-group').classList.toggle('disabled', on);
-  if (!on) {
-    fetch('/stats').then(r => r.json()).then(s => {
-      document.getElementById('exp').value = logSliderFor(s.exposure_us);
-      document.getElementById('exp-val').textContent = s.exposure_us + 'μs';
-      document.getElementById('gain').value = Math.min(s.gain, 16);
-      document.getElementById('gain-val').textContent = s.gain.toFixed(2) + 'x';
-    });
-  }
-  apply();
-}
+// disable manual groups based on initial config
+el('exp-group').classList.toggle('disabled', CFG.ae_enable);
+el('gains-group').classList.toggle('disabled', CFG.awb_enable);
 
-function onAwb() {
-  const on = document.getElementById('awb').checked;
-  document.getElementById('gains-group').classList.toggle('disabled', on);
-  if (!on) {
-    fetch('/stats').then(r => r.json()).then(s => {
-      document.getElementById('rgain').value = Math.min(s.colour_gains[0], 4);
-      document.getElementById('rgain-val').textContent = s.colour_gains[0].toFixed(3);
-      document.getElementById('bgain').value = Math.min(s.colour_gains[1], 4);
-      document.getElementById('bgain-val').textContent = s.colour_gains[1].toFixed(3);
-    });
-  }
-  apply();
-}
+// ── event wiring ──────────────────────────────────────────────────────────────
 
+var debounce = null;
 function apply() {
   clearTimeout(debounce);
   debounce = setTimeout(sendControls, 200);
 }
 
+el('ae').addEventListener('change', function() {
+  var on = this.checked;
+  el('exp-group').classList.toggle('disabled', on);
+  if (!on) {
+    // seed manual sliders from last known camera values
+    fetch('/stats').then(function(r){ return r.json(); }).then(function(s) {
+      if (!s || !s.exposure_us) return;
+      el('exp').value = actualToLog(s.exposure_us);
+      el('exp-val').textContent = fmtUs(s.exposure_us);
+      el('gain').value = Math.min(s.gain, 16);
+      el('gain-val').textContent = s.gain.toFixed(2)+'x';
+    }).catch(function(){});
+  }
+  apply();
+});
+
+el('awb').addEventListener('change', function() {
+  var on = this.checked;
+  el('gains-group').classList.toggle('disabled', on);
+  if (!on) {
+    fetch('/stats').then(function(r){ return r.json(); }).then(function(s) {
+      if (!s || !s.colour_gains) return;
+      el('rgain').value = Math.min(s.colour_gains[0], 4);
+      el('rgain-val').textContent = s.colour_gains[0].toFixed(3);
+      el('bgain').value = Math.min(s.colour_gains[1], 4);
+      el('bgain-val').textContent = s.colour_gains[1].toFixed(3);
+    }).catch(function(){});
+  }
+  apply();
+});
+
+el('awb-mode').addEventListener('change', apply);
+el('denoise').addEventListener('change', apply);
+
+function wireLog(id, valId) {
+  el(id).addEventListener('input', function() {
+    el(valId).textContent = fmtUs(logToActual(this.value));
+    apply();
+  });
+}
+function wireLinear(id, valId, digits, suffix) {
+  el(id).addEventListener('input', function() {
+    el(valId).textContent = parseFloat(this.value).toFixed(digits) + (suffix||'');
+    apply();
+  });
+}
+
+wireLog('exp', 'exp-val');
+wireLog('maxexp', 'maxexp-val');
+wireLinear('gain', 'gain-val', 2, 'x');
+wireLinear('rgain', 'rgain-val', 3, '');
+wireLinear('bgain', 'bgain-val', 3, '');
+wireLinear('brightness', 'brightness-val', 2, '');
+wireLinear('contrast', 'contrast-val', 1, '');
+wireLinear('saturation', 'saturation-val', 1, '');
+wireLinear('sharpness', 'sharpness-val', 1, '');
+
+// ── send controls ─────────────────────────────────────────────────────────────
+
 function sendControls() {
-  const ae = document.getElementById('ae').checked;
-  const awb = document.getElementById('awb').checked;
-  const controls = {
+  var ae = el('ae').checked;
+  var awb = el('awb').checked;
+  var ctrl = {
     AeEnable: ae,
     AwbEnable: awb,
-    AwbMode: parseInt(document.getElementById('awb-mode').value),
-    Brightness: parseFloat(document.getElementById('brightness').value),
-    Contrast: parseFloat(document.getElementById('contrast').value),
-    Saturation: parseFloat(document.getElementById('saturation').value),
-    Sharpness: parseFloat(document.getElementById('sharpness').value),
-    NoiseReductionMode: parseInt(document.getElementById('denoise').value),
-    FrameDurationLimits: [33333, logActual('maxexp')],
+    AwbMode: parseInt(el('awb-mode').value),
+    Brightness: parseFloat(el('brightness').value),
+    Contrast: parseFloat(el('contrast').value),
+    Saturation: parseFloat(el('saturation').value),
+    Sharpness: parseFloat(el('sharpness').value),
+    NoiseReductionMode: parseInt(el('denoise').value),
+    FrameDurationLimits: [33333, logToActual(el('maxexp').value)],
   };
   if (!ae) {
-    controls.ExposureTime = logActual('exp');
-    controls.AnalogueGain = parseFloat(document.getElementById('gain').value);
+    ctrl.ExposureTime = logToActual(el('exp').value);
+    ctrl.AnalogueGain = parseFloat(el('gain').value);
   }
   if (!awb) {
-    controls.ColourGains = [
-      parseFloat(document.getElementById('rgain').value),
-      parseFloat(document.getElementById('bgain').value),
-    ];
+    ctrl.ColourGains = [parseFloat(el('rgain').value), parseFloat(el('bgain').value)];
   }
-  fetch('/set', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(controls)})
-    .catch(() => {});
+  fetch('/set', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(ctrl)
+  }).catch(function(){});
   generateYaml();
 }
 
-function saveFrame() {
-  const a = document.createElement('a');
-  a.href = '/snapshot.jpg';
-  a.download = 'frame_' + Date.now() + '.jpg';
-  a.click();
-}
+// ── stats polling ─────────────────────────────────────────────────────────────
+
+setInterval(function() {
+  fetch('/stats').then(function(r){ return r.json(); }).then(function(s) {
+    if (!s || !s.shape) return;
+    var cg = s.colour_gains || [0, 0];
+    el('stats').textContent = s.shape + '  mean=' + s.mean + '  std=' + s.std
+      + '  exp=' + s.exposure_us + 'μs  gain=' + s.gain + '×'
+      + '  R=' + cg[0] + '  B=' + cg[1] + '  lux=' + s.lux;
+    if (el('ae').checked) {
+      el('exp-val').textContent = fmtUs(s.exposure_us) + ' (auto)';
+      el('gain-val').textContent = s.gain + '× (auto)';
+    }
+    if (el('awb').checked) {
+      el('rgain-val').textContent = cg[0] + ' (auto)';
+      el('bgain-val').textContent = cg[1] + ' (auto)';
+    }
+  }).catch(function(){});
+}, 1000);
+
+// ── YAML output ───────────────────────────────────────────────────────────────
 
 function generateYaml() {
-  const ae = document.getElementById('ae').checked;
-  const awb = document.getElementById('awb').checked;
-  const maxexp_s = (logActual('maxexp') / 1e6).toFixed(1);
-  const lines = ['camera:'];
+  var ae = el('ae').checked;
+  var awb = el('awb').checked;
+  var maxexp_s = (logToActual(el('maxexp').value) / 1e6).toFixed(1);
+  var lines = ['camera:'];
   lines.push('  max_exposure_seconds: ' + maxexp_s);
   lines.push('  ae_enable: ' + ae);
   if (!ae) {
-    lines.push('  exposure_time_us: ' + logActual('exp'));
-    lines.push('  analogue_gain: ' + parseFloat(document.getElementById('gain').value).toFixed(2));
+    lines.push('  exposure_time_us: ' + logToActual(el('exp').value));
+    lines.push('  analogue_gain: ' + parseFloat(el('gain').value).toFixed(2));
   }
   lines.push('  awb_enable: ' + awb);
-  lines.push('  awb_mode: ' + document.getElementById('awb-mode').value +
-    '  # 0=Auto 1=Incandescent 2=Tungsten 3=Fluorescent 4=Indoor 5=Daylight 6=Cloudy');
+  lines.push('  awb_mode: ' + el('awb-mode').value
+    + '  # 0=Auto 1=Incandescent 2=Tungsten 3=Fluorescent 4=Indoor 5=Daylight 6=Cloudy');
   if (!awb) {
-    lines.push('  red_gain: ' + parseFloat(document.getElementById('rgain').value).toFixed(3));
-    lines.push('  blue_gain: ' + parseFloat(document.getElementById('bgain').value).toFixed(3));
+    lines.push('  red_gain: ' + parseFloat(el('rgain').value).toFixed(3));
+    lines.push('  blue_gain: ' + parseFloat(el('bgain').value).toFixed(3));
   }
-  lines.push('  brightness: ' + parseFloat(document.getElementById('brightness').value).toFixed(2));
-  lines.push('  contrast: ' + parseFloat(document.getElementById('contrast').value).toFixed(1));
-  lines.push('  saturation: ' + parseFloat(document.getElementById('saturation').value).toFixed(1));
-  lines.push('  sharpness: ' + parseFloat(document.getElementById('sharpness').value).toFixed(1));
-  lines.push('  noise_reduction_mode: ' + document.getElementById('denoise').value +
-    '  # 0=Off 1=Fast 2=HighQuality');
-  document.getElementById('yaml-out').value = lines.join('\n');
+  lines.push('  brightness: ' + parseFloat(el('brightness').value).toFixed(2));
+  lines.push('  contrast: ' + parseFloat(el('contrast').value).toFixed(1));
+  lines.push('  saturation: ' + parseFloat(el('saturation').value).toFixed(1));
+  lines.push('  sharpness: ' + parseFloat(el('sharpness').value).toFixed(1));
+  lines.push('  noise_reduction_mode: ' + el('denoise').value
+    + '  # 0=Off 1=Fast 2=HighQuality');
+  el('yaml-out').value = lines.join('\n');
 }
 
-function copyYaml() {
-  const ta = document.getElementById('yaml-out');
+generateYaml();
+
+el('save-btn').addEventListener('click', function() {
+  var a = document.createElement('a');
+  a.href = '/snapshot.jpg';
+  a.download = 'frame_' + Date.now() + '.jpg';
+  a.click();
+});
+
+el('copy-btn').addEventListener('click', function() {
+  var ta = el('yaml-out');
   ta.select();
-  navigator.clipboard.writeText(ta.value).catch(() => document.execCommand('copy'));
-}
-
-// Poll stats and update auto-value displays
-setInterval(() => {
-  fetch('/stats').then(r => r.json()).then(s => {
-    document.getElementById('stats').textContent =
-      s.shape + '  mean=' + s.mean + '  std=' + s.std +
-      '  exp=' + s.exposure_us + 'μs  gain=' + s.gain + '×' +
-      '  R=' + s.colour_gains[0] + '  B=' + s.colour_gains[1] + '  lux=' + s.lux;
-    if (document.getElementById('ae').checked) {
-      document.getElementById('exp-val').textContent = s.exposure_us + 'μs (auto)';
-      document.getElementById('gain-val').textContent = s.gain + '× (auto)';
-    }
-    if (document.getElementById('awb').checked) {
-      document.getElementById('rgain-val').textContent = s.colour_gains[0] + ' (auto)';
-      document.getElementById('bgain-val').textContent = s.colour_gains[1] + ' (auto)';
-    }
-  }).catch(() => {});
-}, 1000);
-
-onAe(); onAwb(); generateYaml();
+  navigator.clipboard.writeText(ta.value).catch(function() {
+    document.execCommand('copy');
+  });
+});
 </script>
 </body>
 </html>
@@ -351,14 +418,17 @@ onAe(); onAwb(); generateYaml();
 
 # ─── HTTP handler ─────────────────────────────────────────────────────────────
 
+_html_cache: str = ""   # filled in main() once config is known
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        pass  # suppress per-request logs
+        pass
 
     def do_GET(self):
         path = self.path.split("?")[0]
         if path == "/":
-            self._send(200, "text/html; charset=utf-8", _HTML.encode())
+            self._send(200, "text/html; charset=utf-8", _html_cache.encode())
         elif path == "/stream.mjpeg":
             self._stream()
         elif path == "/stats":
@@ -408,7 +478,7 @@ class Handler(BaseHTTPRequestHandler):
                         b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + j + b"\r\n"
                     )
                     self.wfile.flush()
-                time.sleep(0.12)  # ~8 fps to the browser
+                time.sleep(0.12)
         except (BrokenPipeError, ConnectionResetError):
             pass
 
@@ -417,7 +487,6 @@ def _apply(controls: dict) -> None:
     ae_on = bool(controls.get("AeEnable", True))
     awb_on = bool(controls.get("AwbEnable", True))
     mapped: dict = {}
-
     for key, val in controls.items():
         if key in ("AeEnable", "AwbEnable"):
             mapped[key] = bool(val)
@@ -433,13 +502,11 @@ def _apply(controls: dict) -> None:
             mapped[key] = float(val)
         elif key == "ColourGains" and not awb_on:
             mapped[key] = (float(val[0]), float(val[1]))
-
     if mapped:
         try:
             _cam.set_controls(mapped)
         except Exception as exc:
             print(f"set_controls error: {exc}")
-
 
 # ─── main ─────────────────────────────────────────────────────────────────────
 
@@ -456,23 +523,45 @@ def _local_ips() -> list[str]:
 
 
 def main() -> None:
+    global _cam, _html_cache
+    import argparse
     parser = argparse.ArgumentParser(description="Interactive camera tuner")
-    parser.add_argument("--width", type=int, default=640)
-    parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--port", type=int, default=7000)
+    parser.add_argument("--config", default=None, help="Path to config.yaml")
     args = parser.parse_args()
 
-    global _cam
-    from picamera2 import Picamera2
+    from rabbit_deterrent.config import load_config
+    cfg = load_config(args.config)
+    cam_cfg = cfg.camera
+    width = cfg.detection.capture_width
+    height = cfg.detection.capture_height
 
+    cfg_dict = {
+        "max_exposure_seconds": cam_cfg.max_exposure_seconds,
+        "ae_enable": cam_cfg.ae_enable,
+        "exposure_time_us": cam_cfg.exposure_time_us,
+        "analogue_gain": cam_cfg.analogue_gain,
+        "awb_enable": cam_cfg.awb_enable,
+        "awb_mode": cam_cfg.awb_mode,
+        "red_gain": cam_cfg.red_gain,
+        "blue_gain": cam_cfg.blue_gain,
+        "brightness": cam_cfg.brightness,
+        "contrast": cam_cfg.contrast,
+        "saturation": cam_cfg.saturation,
+        "sharpness": cam_cfg.sharpness,
+        "noise_reduction_mode": cam_cfg.noise_reduction_mode,
+    }
+    _html_cache = _HTML_TEMPLATE.replace("__CFG__", json.dumps(cfg_dict))
+
+    from picamera2 import Picamera2
     _cam = Picamera2()
-    cfg = _cam.create_video_configuration(
-        main={"size": (args.width, args.height), "format": "RGB888"},
-        controls={"FrameDurationLimits": (33333, 3_000_000)},
+    pi_cfg = _cam.create_video_configuration(
+        main={"size": (width, height), "format": "RGB888"},
+        controls={"FrameDurationLimits": (33333, int(cam_cfg.max_exposure_seconds * 1_000_000))},
     )
-    _cam.configure(cfg)
+    _cam.configure(pi_cfg)
     _cam.start()
-    print(f"Camera started at {args.width}x{args.height}")
+    print(f"Camera started at {width}x{height}")
 
     threading.Thread(target=capture_loop, daemon=True).start()
 
