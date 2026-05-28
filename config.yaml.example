@@ -1,9 +1,6 @@
 camera:
   # AE exposure ceiling for still captures. AE uses less in daylight automatically,
   # so a high value here does not slow down daytime scanning.
-  # With 3s max, each night capture takes ~6s (one warmup + one real frame).
-  # Increase scanning_interval_seconds accordingly so the Pi isn't scheduling
-  # a new capture before the previous one finishes.
   max_exposure_seconds: 3.0
 
 detection:

@@ -160,7 +160,7 @@ class CameraClient:
         self._server = ServerClient(config.server)
         self._clip = ClipRecorder(
             config=config.clip,
-            fps=1.0 / max(config.detection.alert_poll_interval_seconds, 0.1),
+            fps=1.0 / max(config.detection.alert_poll_interval_seconds, 1.0),
         )
         self._state, self._clear_streak = self._load_state()
         self._failure_count = 0
@@ -188,7 +188,6 @@ class CameraClient:
             self._camera.stop_stream()
 
     def _run_scanning_tick(self) -> None:
-        t0 = time.monotonic()
         frame = self._camera.capture()
         self._clip.push_frame(frame)
         jpeg = ServerClient.encode_frame(frame)
@@ -213,17 +212,15 @@ class CameraClient:
                 self._save_state()
                 self._play_audio_if_due()
                 self._start_clip()
-                self._camera.start_stream(1.0 / self._config.detection.alert_poll_interval_seconds)
+                self._camera.start_stream(1.0 / max(self._config.detection.alert_poll_interval_seconds, 1.0))
                 return
             else:
                 logger.info("No rabbit (conf=%.2f)", confidence)
 
         self._save_state()
-        elapsed = time.monotonic() - t0
-        time.sleep(max(0.0, self._config.detection.scanning_interval_seconds - elapsed))
+        time.sleep(self._config.detection.scanning_interval_seconds)
 
     def _run_alert_tick(self) -> None:
-        t0 = time.monotonic()
         frame = self._camera.capture_frame()
         self._clip.push_frame(frame)
         jpeg = ServerClient.encode_frame(frame)
@@ -259,8 +256,7 @@ class CameraClient:
                     self._clear_streak = 0
 
         self._save_state()
-        elapsed = time.monotonic() - t0
-        time.sleep(max(0.0, self._config.detection.alert_poll_interval_seconds - elapsed))
+        time.sleep(self._config.detection.alert_poll_interval_seconds)
 
     def _run_offline_tick(self) -> None:
         frame = self._camera.capture()
