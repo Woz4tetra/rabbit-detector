@@ -33,14 +33,30 @@ git add <files>
 git commit -m "..."
 git push
 
-# On Pi: pull and reinstall
-ssh ben@192.168.50.252
+# Reach the Pi via the megamind jump host (the Pi is not reachable directly
+# from the developer machine — pathfinder key lives on megamind, not locally):
+ssh ben@megamind
+ssh -i ~/.ssh/pathfinder ben@192.168.1.174   # from megamind
 cd ~/rabbit-detector
 git pull
 bash scripts/install_pi.sh   # if dependencies changed
 ```
 
-Pi IP: `192.168.50.252`
+For one-shot commands from the developer machine:
+
+```bash
+ssh ben@megamind 'ssh -i ~/.ssh/pathfinder ben@192.168.1.174 "<command>"'
+```
+
+To copy a file to the Pi, stage it on megamind first (ProxyJump can't reach
+the Pi because the pathfinder key isn't local):
+
+```bash
+scp <file> ben@megamind:/tmp/
+ssh ben@megamind 'scp -i ~/.ssh/pathfinder /tmp/<file> ben@192.168.1.174:<dest> && rm /tmp/<file>'
+```
+
+Pi IP: `192.168.1.174` (jump host: `megamind`, inner key: `~/.ssh/pathfinder` on megamind)
 
 ## Key commands
 
