@@ -160,7 +160,7 @@ async def detect(frame: UploadFile = File(...)):
 
     ts = datetime.datetime.utcnow().isoformat() + "Z"
     frame_name = _save_frame(data, result.rabbit)
-    record: dict = {"timestamp": ts, "rabbit": result.rabbit, "confidence": result.confidence, "raw_response": result.raw_response}
+    record: dict = {"timestamp": ts, "rabbit_present": result.rabbit, "confidence": result.confidence, "raw_response": result.raw_response}
     _recent_frames.append(record)
 
     if result.rabbit:
@@ -203,8 +203,8 @@ async def get_frame(name: str):
 async def api_state():
     if _recent_frames:
         last = _recent_frames[-1]
-        status_text = f'RABBIT DETECTED at {last["timestamp"]}' if last["rabbit"] else f'Clear at {last["timestamp"]}'
-        status_color = "#ff6b6b" if last["rabbit"] else "#51cf66"
+        status_text = f'RABBIT DETECTED at {last["timestamp"]}' if last["rabbit_present"] else f'Clear at {last["timestamp"]}'
+        status_color = "#ff6b6b" if last["rabbit_present"] else "#51cf66"
     elif _rabbit_detections:
         last = _rabbit_detections[-1]
         status_text = f'Last rabbit: {last["timestamp"]}'
@@ -215,8 +215,8 @@ async def api_state():
         "status_text": status_text,
         "status_color": status_color,
         "detections": [
-            {"timestamp": d["timestamp"], "raw_response": d["raw_response"], "frame": d.get("frame", "")}
-            for d in reversed(_rabbit_detections)
+            {"timestamp": d.get("timestamp", 0.0), "raw_response": d.get("raw_response", ""), "frame": d.get("frame", "")}
+            for d in reversed(_rabbit_detections) if d["rabbit_present"]
         ],
     }
 
@@ -225,6 +225,8 @@ async def api_state():
 async def dashboard():
     rows = ""
     for d in reversed(_rabbit_detections):
+        if not d["rabbit_present"]:
+            continue
         frame = d.get("frame", "")
         data_attr = f'data-frame="{frame}"' if frame else ""
         cursor = "cursor:pointer" if frame else ""
@@ -237,8 +239,8 @@ async def dashboard():
 
     if _recent_frames:
         last = _recent_frames[-1]
-        status_text = f'RABBIT DETECTED at {last["timestamp"]}' if last["rabbit"] else f'Clear at {last["timestamp"]}'
-        status_color = "#ff6b6b" if last["rabbit"] else "#51cf66"
+        status_text = f'RABBIT DETECTED at {last["timestamp"]}' if last["rabbit_present"] else f'Clear at {last["timestamp"]}'
+        status_color = "#ff6b6b" if last["rabbit_present"] else "#51cf66"
     elif _rabbit_detections:
         last = _rabbit_detections[-1]
         status_text = f'Last rabbit: {last["timestamp"]}'
