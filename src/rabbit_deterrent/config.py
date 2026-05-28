@@ -11,7 +11,19 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 @dataclass
 class CameraConfig:
-    max_exposure_seconds: float = 3.0  # AE ceiling; AE uses less in daylight automatically
+    max_exposure_seconds: float = 3.0
+    ae_enable: bool = True
+    exposure_time_us: int = 20000
+    analogue_gain: float = 1.0
+    awb_enable: bool = True
+    awb_mode: int = 0
+    red_gain: float = 1.5
+    blue_gain: float = 1.5
+    brightness: float = 0.0
+    contrast: float = 1.0
+    saturation: float = 1.0
+    sharpness: float = 1.0
+    noise_reduction_mode: int = 1
 
 
 @dataclass
@@ -150,6 +162,18 @@ def load_config(path: str | Path | None = None) -> Config:
         ),
         camera=CameraConfig(
             max_exposure_seconds=float(cam.get("max_exposure_seconds", 3.0)),
+            ae_enable=bool(cam.get("ae_enable", True)),
+            exposure_time_us=int(cam.get("exposure_time_us", 20000)),
+            analogue_gain=float(cam.get("analogue_gain", 1.0)),
+            awb_enable=bool(cam.get("awb_enable", True)),
+            awb_mode=int(cam.get("awb_mode", 0)),
+            red_gain=float(cam.get("red_gain", 1.5)),
+            blue_gain=float(cam.get("blue_gain", 1.5)),
+            brightness=float(cam.get("brightness", 0.0)),
+            contrast=float(cam.get("contrast", 1.0)),
+            saturation=float(cam.get("saturation", 1.0)),
+            sharpness=float(cam.get("sharpness", 1.0)),
+            noise_reduction_mode=int(cam.get("noise_reduction_mode", 1)),
         ),
         log_detections=bool(raw.get("log_detections", True)),
         log_dir=raw.get("log_dir", "data/logs"),

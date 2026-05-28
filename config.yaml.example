@@ -1,7 +1,19 @@
 camera:
-  # AE exposure ceiling for still captures. AE uses less in daylight automatically,
-  # so a high value here does not slow down daytime scanning.
-  max_exposure_seconds: 3.0
+  max_exposure_seconds: 3.0  # AE ceiling; AE uses less in daylight automatically
+  # All fields below are optional. Use scripts/test_camera.py to tune them live,
+  # then copy the generated YAML here.
+  ae_enable: true
+  # exposure_time_us: 20000    # only used when ae_enable: false
+  # analogue_gain: 1.0         # only used when ae_enable: false
+  awb_enable: true
+  awb_mode: 0                  # 0=Auto 1=Incandescent 2=Tungsten 3=Fluorescent 4=Indoor 5=Daylight 6=Cloudy
+  # red_gain: 1.5              # only used when awb_enable: false
+  # blue_gain: 1.5             # only used when awb_enable: false
+  brightness: 0.0
+  contrast: 1.0
+  saturation: 1.0
+  sharpness: 1.0
+  noise_reduction_mode: 1      # 0=Off 1=Fast 2=HighQuality
 
 detection:
   confidence_threshold: 0.5      # minimum server confidence to trigger audio on the Pi
