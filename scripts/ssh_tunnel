@@ -1,0 +1,3 @@
+#!/bin/bash
+PORT=$1
+ssh -L $PORT:localhost:$PORT -J ben@megamind -i ~/.ssh/pathfinder ben@192.168.1.174
