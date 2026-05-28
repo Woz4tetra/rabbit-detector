@@ -242,15 +242,12 @@ async def dashboard():
   h1 {{ color: #e94560; margin-bottom: 12px; font-size: 1.6em; }}
   .status {{ font-size: 1.1em; color: {status_color}; padding: 10px 14px; background: #16213e;
              border-radius: 4px; margin-bottom: 18px; border-left: 3px solid {status_color}; }}
-  .main {{ display: flex; gap: 16px; align-items: flex-start; }}
-  .table-panel {{ flex: 1; min-width: 0; }}
-  .image-panel {{ width: 420px; flex-shrink: 0; }}
-  .frames {{ display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; }}
-  .frame-box {{ background: #16213e; padding: 14px; border-radius: 6px; }}
+  .frames {{ display: flex; gap: 16px; margin-bottom: 16px; }}
+  .frame-box {{ flex: 1; min-width: 0; background: #16213e; padding: 14px; border-radius: 6px; }}
   .frame-box h2 {{ font-size: 0.8em; color: #888; text-transform: uppercase; letter-spacing: 1px;
                    margin-bottom: 10px; }}
-  .frame-box img {{ max-width: 100%; border-radius: 4px; display: block; }}
-  .no-frame {{ color: #555; font-style: italic; padding: 30px 0; text-align: center; }}
+  .frame-box img {{ width: 100%; border-radius: 4px; display: block; }}
+  .no-frame {{ color: #555; font-style: italic; padding: 60px 0; text-align: center; }}
   table {{ width: 100%; border-collapse: collapse; background: #16213e; border-radius: 6px;
            overflow: hidden; font-size: 0.88em; }}
   th {{ background: #0f3460; padding: 8px 12px; text-align: left; color: #aaa;
@@ -258,38 +255,31 @@ async def dashboard():
   td {{ padding: 7px 12px; border-top: 1px solid #0f3460; }}
   tr.det-row:hover td {{ background: #0f3460; }}
   tr.det-row.selected td {{ background: #1a3a60; border-left: 3px solid #ff6b6b; }}
-  @media (max-width: 800px) {{
-    .main {{ flex-direction: column; }}
-    .image-panel {{ width: 100%; }}
+  @media (max-width: 700px) {{
+    .frames {{ flex-direction: column; }}
   }}
 </style>
 </head>
 <body>
 <h1>Rabbit Detector</h1>
 <div class="status">{status_text}</div>
-<div class="main">
-  <div class="table-panel">
-    <table>
-      <thead><tr><th>Time</th><th>Model Response</th></tr></thead>
-      <tbody id="det-tbody">{rows or no_rows}</tbody>
-    </table>
+<div class="frames">
+  <div class="frame-box">
+    <h2>Live Feed</h2>
+    <img id="live" src="/latest-frame?t=0"
+         onerror="this.style.display='none';document.getElementById('live-placeholder').style.display='block'">
+    <div id="live-placeholder" class="no-frame" style="display:none">No frames yet</div>
   </div>
-  <div class="image-panel">
-    <div class="frames">
-      <div class="frame-box">
-        <h2>Live Feed</h2>
-        <img id="live" src="/latest-frame?t=0"
-             onerror="this.style.display='none';document.getElementById('live-placeholder').style.display='block'">
-        <div id="live-placeholder" class="no-frame" style="display:none">No frames yet</div>
-      </div>
-      <div class="frame-box">
-        <h2 id="det-label">Last Detection</h2>
-        <img id="det-img" src="{detection_src}" style="display:{detection_display};max-width:100%;border-radius:4px">
-        <div id="det-placeholder" class="no-frame" style="display:{no_detection_display}">No detections yet</div>
-      </div>
-    </div>
+  <div class="frame-box">
+    <h2 id="det-label">Last Detection</h2>
+    <img id="det-img" src="{detection_src}" style="display:{detection_display};width:100%;border-radius:4px">
+    <div id="det-placeholder" class="no-frame" style="display:{no_detection_display}">No detections yet</div>
   </div>
 </div>
+<table>
+  <thead><tr><th>Time</th><th>Model Response</th></tr></thead>
+  <tbody id="det-tbody">{rows or no_rows}</tbody>
+</table>
 <script>
   (function() {{
     var liveImg = document.getElementById('live');
