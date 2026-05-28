@@ -392,7 +392,7 @@ function generateYaml() {
   lines.push('  sharpness: ' + parseFloat(el('sharpness').value).toFixed(1));
   lines.push('  noise_reduction_mode: ' + el('denoise').value
     + '  # 0=Off 1=Fast 2=HighQuality');
-  el('yaml-out').value = lines.join('\n');
+  el('yaml-out').value = lines.join('\\n');
 }
 
 generateYaml();
