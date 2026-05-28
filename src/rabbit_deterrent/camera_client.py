@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 STATE_FILE = Path("/var/lib/rabbit-deterrent/state.json")
 CLEAR_THRESHOLD = 3  # consecutive clear responses before leaving ALERT
+IR_USE_CLAHE = False  # CLAHE amplifies shot noise on single noisy IR frames; re-enable once frames are clean (e.g. after temporal stacking)
 
 
 class State(str, Enum):
@@ -144,8 +145,9 @@ def _correct_ir_frame(frame: np.ndarray) -> np.ndarray:
     b, r = frame[:, :, 0].mean(), frame[:, :, 2].mean()
     if r < 1 or b / r > 1.5:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-        gray = clahe.apply(gray)
+        if IR_USE_CLAHE:
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            gray = clahe.apply(gray)
         return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     return frame
 
