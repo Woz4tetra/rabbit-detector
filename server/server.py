@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import io
+import json
 import logging
 import threading
 from collections import deque
@@ -26,7 +27,9 @@ _tokenizer = None
 _lock = asyncio.Lock()
 _settings: ServerSettings | None = None
 _notifier = None
-_recent_detections: Deque[dict] = deque(maxlen=20)
+_recent_frames: Deque[dict] = deque(maxlen=5)   # last few frames for status bar
+_rabbit_detections: list[dict] = []              # all rabbit detections, persisted to disk
+_detections_log_path: Path | None = None
 _latest_frame_path: Path | None = None
 _last_detection_frame_path: Path | None = None
 
@@ -34,6 +37,7 @@ _last_detection_frame_path: Path | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _model, _tokenizer, _settings, _notifier, _latest_frame_path, _last_detection_frame_path
+    global _detections_log_path, _rabbit_detections
 
     _settings, email_cfg = load_server_settings()
 
@@ -44,6 +48,20 @@ async def lifespan(app: FastAPI):
     detection = frames_dir / "last_detection.jpg"
     _latest_frame_path = latest if latest.exists() else None
     _last_detection_frame_path = detection if detection.exists() else None
+
+    log_path = PROJECT_ROOT / "data" / "detections.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    _detections_log_path = log_path
+    if log_path.exists():
+        with open(log_path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        _rabbit_detections.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+        logger.info("Loaded %d rabbit detections from %s", len(_rabbit_detections), log_path)
 
     if email_cfg.enabled:
         from rabbit_deterrent.notifier import EmailNotifier
@@ -143,11 +161,14 @@ async def detect(frame: UploadFile = File(...)):
     ts = datetime.datetime.utcnow().isoformat() + "Z"
     frame_name = _save_frame(data, result.rabbit)
     record: dict = {"timestamp": ts, "rabbit": result.rabbit, "confidence": result.confidence, "raw_response": result.raw_response}
-    if result.rabbit:
-        record["frame"] = frame_name
-    _recent_detections.append(record)
+    _recent_frames.append(record)
 
     if result.rabbit:
+        record["frame"] = frame_name
+        _rabbit_detections.append(record)
+        if _detections_log_path is not None:
+            with open(_detections_log_path, "a") as f:
+                f.write(json.dumps(record) + "\n")
         threading.Thread(target=_send_email, args=(data, ts, result.raw_response), daemon=True).start()
 
     return result
@@ -180,10 +201,8 @@ async def get_frame(name: str):
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
-    rabbit_detections = [d for d in reversed(list(_recent_detections)) if d["rabbit"]]
-
     rows = ""
-    for d in rabbit_detections:
+    for d in reversed(_rabbit_detections):
         frame = d.get("frame", "")
         data_attr = f'data-frame="{frame}"' if frame else ""
         cursor = "cursor:pointer" if frame else ""
@@ -194,10 +213,14 @@ async def dashboard():
             f'</tr>\n'
         )
 
-    if _recent_detections:
-        last = _recent_detections[-1]
+    if _recent_frames:
+        last = _recent_frames[-1]
         status_text = f'RABBIT DETECTED at {last["timestamp"]}' if last["rabbit"] else f'Clear at {last["timestamp"]}'
         status_color = "#ff6b6b" if last["rabbit"] else "#51cf66"
+    elif _rabbit_detections:
+        last = _rabbit_detections[-1]
+        status_text = f'Last rabbit: {last["timestamp"]}'
+        status_color = "#ff6b6b"
     else:
         status_text, status_color = "Waiting for first frame…", "#888"
 
