@@ -199,6 +199,28 @@ async def get_frame(name: str):
     return Response(content=path.read_bytes(), media_type="image/jpeg")
 
 
+@app.get("/api/state")
+async def api_state():
+    if _recent_frames:
+        last = _recent_frames[-1]
+        status_text = f'RABBIT DETECTED at {last["timestamp"]}' if last["rabbit"] else f'Clear at {last["timestamp"]}'
+        status_color = "#ff6b6b" if last["rabbit"] else "#51cf66"
+    elif _rabbit_detections:
+        last = _rabbit_detections[-1]
+        status_text = f'Last rabbit: {last["timestamp"]}'
+        status_color = "#ff6b6b"
+    else:
+        status_text, status_color = "Waiting for first frame…", "#888"
+    return {
+        "status_text": status_text,
+        "status_color": status_color,
+        "detections": [
+            {"timestamp": d["timestamp"], "raw_response": d["raw_response"], "frame": d.get("frame", "")}
+            for d in reversed(_rabbit_detections)
+        ],
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
     rows = ""
@@ -314,7 +336,28 @@ async def dashboard():
       detPh.style.display = 'none';
     }});
 
-    setTimeout(function() {{ location.reload(); }}, 30000);
+    var statusEl = document.querySelector('.status');
+    setInterval(function() {{
+      fetch('/api/state').then(function(r) {{ return r.json(); }}).then(function(data) {{
+        statusEl.textContent = data.status_text;
+        statusEl.style.color = data.status_color;
+        statusEl.style.borderLeftColor = data.status_color;
+
+        var tbody = document.getElementById('det-tbody');
+        if (data.detections.length === 0) {{
+          tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:#555">No rabbit detections yet</td></tr>';
+          return;
+        }}
+        var html = '';
+        data.detections.forEach(function(d) {{
+          var attr = d.frame ? ' data-frame="' + d.frame + '"' : '';
+          var cursor = d.frame ? 'cursor:pointer' : '';
+          var sel = (selected && selected.getAttribute('data-frame') === d.frame) ? ' selected' : '';
+          html += '<tr class="det-row' + sel + '"' + attr + ' style="' + cursor + '"><td>' + d.timestamp + '</td><td>' + d.raw_response + '</td></tr>';
+        }});
+        tbody.innerHTML = html;
+      }}).catch(function() {{}});
+    }}, 5000);
   }})();
 </script>
 </body>
