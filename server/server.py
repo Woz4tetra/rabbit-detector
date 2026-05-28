@@ -215,8 +215,8 @@ async def api_state():
         "status_text": status_text,
         "status_color": status_color,
         "detections": [
-            {"timestamp": d.get("timestamp", 0.0), "raw_response": d.get("raw_response", ""), "frame": d.get("frame", "")}
-            for d in reversed(_rabbit_detections) if d["rabbit_present"]
+            {"timestamp": d.get("timestamp", 0.0), "rabbit_present": d.get("rabbit_present", False), "frame": d.get("frame", "")}
+            for d in reversed(_rabbit_detections) if d.get("rabbit_present")
         ],
     }
 
@@ -225,15 +225,15 @@ async def api_state():
 async def dashboard():
     rows = ""
     for d in reversed(_rabbit_detections):
-        if not d["rabbit_present"]:
+        if not d.get("rabbit_present"):
             continue
         frame = d.get("frame", "")
         data_attr = f'data-frame="{frame}"' if frame else ""
         cursor = "cursor:pointer" if frame else ""
         rows += (
             f'<tr class="det-row" {data_attr} style="{cursor}">'
-            f'<td>{d["timestamp"]}</td>'
-            f'<td>{d["raw_response"]}</td>'
+            f'<td>{d.get("timestamp", "")}</td>'
+            f'<td>{"Rabbit detected" if d.get("rabbit_present") else "Clear"}</td>'
             f'</tr>\n'
         )
 
@@ -301,7 +301,7 @@ async def dashboard():
   </div>
 </div>
 <table>
-  <thead><tr><th>Time</th><th>Model Response</th></tr></thead>
+  <thead><tr><th>Time</th><th>Detection</th></tr></thead>
   <tbody id="det-tbody">{rows or no_rows}</tbody>
 </table>
 <script>
@@ -355,7 +355,7 @@ async def dashboard():
           var attr = d.frame ? ' data-frame="' + d.frame + '"' : '';
           var cursor = d.frame ? 'cursor:pointer' : '';
           var sel = (selected && selected.getAttribute('data-frame') === d.frame) ? ' selected' : '';
-          html += '<tr class="det-row' + sel + '"' + attr + ' style="' + cursor + '"><td>' + d.timestamp + '</td><td>' + d.raw_response + '</td></tr>';
+          html += '<tr class="det-row' + sel + '"' + attr + ' style="' + cursor + '"><td>' + d.timestamp + '</td><td>' + (d.rabbit_present ? 'Rabbit detected' : 'Clear') + '</td></tr>';
         }});
         tbody.innerHTML = html;
       }}).catch(function() {{}});
