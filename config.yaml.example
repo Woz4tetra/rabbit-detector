@@ -22,9 +22,9 @@ camera_night:
   # 850 nm IR illumination. Tune red_gain/blue_gain to neutralize the IR cast
   # (auto AWB produces a heavy blue tint).
   ae_enable: false
-  exposure_time_us: 2000000    # 2 s
+  exposure_time_us: 1000000    # 1 s — OV5647's usable ceiling; longer requests hang or clamp
   analogue_gain: 0.9
-  max_exposure_seconds: 1.0    # unused while ae_enable: false
+  max_exposure_seconds: 1.0    # frame-duration ceiling; caps ExposureTime even in manual mode, so keep >= exposure_time_us
   awb_enable: false
   red_gain: 1.15
   blue_gain: 1.3
