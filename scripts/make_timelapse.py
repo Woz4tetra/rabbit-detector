@@ -4,6 +4,7 @@ Windows run from 8 AM Eastern to 8 AM Eastern the next day."""
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 import tempfile
@@ -31,6 +32,32 @@ def window_start(dt: datetime) -> datetime:
     if et < anchor:
         anchor -= timedelta(days=1)
     return anchor
+
+
+def manifest_path(output: Path) -> Path:
+    return output.with_suffix(output.suffix + ".json")
+
+
+def read_manifest(output: Path) -> dict | None:
+    path = manifest_path(output)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def write_manifest(output: Path, frames: list[Path], complete: bool) -> None:
+    manifest_path(output).write_text(
+        json.dumps(
+            {
+                "frame_count": len(frames),
+                "last_frame": frames[-1].name if frames else None,
+                "complete": complete,
+            }
+        )
+    )
 
 
 def make_timelapse(frames: list[Path], output: Path, fps: int) -> None:
@@ -95,6 +122,8 @@ def main() -> None:
         print(f"No frames found in {args.frames_dir}", file=sys.stderr)
         sys.exit(1)
 
+    now = datetime.now(timezone.utc)
+
     for window_dt, pairs in sorted(windows.items()):
         date_str = window_dt.strftime("%Y%m%d")
         output = args.output_dir / f"timelapse_{date_str}.mp4"
@@ -106,8 +135,27 @@ def main() -> None:
             continue
 
         frames = [p for _, p in sorted(pairs)]
-        print(f"Building {output.name}: {len(frames)} frames at {args.fps} fps")
+        # The window has fully elapsed once 24 hours past its 8 AM anchor, so no
+        # more frames will ever land in it.
+        complete = now >= window_dt + timedelta(days=1)
+
+        manifest = read_manifest(output)
+        if output.exists() and manifest is not None:
+            unchanged = (
+                manifest.get("frame_count") == len(frames)
+                and manifest.get("last_frame") == frames[-1].name
+            )
+            if unchanged:
+                print(f"Skipping {date_str}: up to date ({len(frames)} frames)")
+                continue
+
+        status = "complete" if complete else "in progress, will rebuild next run"
+        print(
+            f"Building {output.name}: {len(frames)} frames at {args.fps} fps "
+            f"({status})"
+        )
         make_timelapse(frames, output, args.fps)
+        write_manifest(output, frames, complete)
         print(f"  -> {output}")
 
 

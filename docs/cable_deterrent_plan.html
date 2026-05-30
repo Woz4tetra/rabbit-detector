@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overhead Cable Deterrent — Build Plan</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --ink: #e6e8ec;
+    --muted: #9aa3b2;
+    --accent: #ffb454;
+    --accent2: #6fb3ff;
+    --good: #5ad17a;
+    --bad: #ff6b6b;
+    --line: #2a2f3a;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 40px 24px 96px; }
+  h1 { font-size: 30px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 22px; margin: 40px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 24px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  p { margin: 10px 0; }
+  code { font-family: var(--mono); background: #0b0d11; padding: 1px 6px; border-radius: 4px; font-size: 0.9em; }
+  pre { background: #0b0d11; border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); color: var(--accent2); }
+  tr:nth-child(even) td { background: #13161c; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin: 16px 0; }
+  .note { border-left: 3px solid var(--accent2); }
+  .warn { border-left: 3px solid var(--accent); }
+  .bad  { border-left: 3px solid var(--bad); }
+  .pill { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #232834; color: var(--muted); margin-left: 8px; vertical-align: middle; }
+  ul, ol { margin: 8px 0 8px 4px; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .mono { font-family: var(--mono); }
+  .good { color: var(--good); }
+  .red { color: var(--bad); }
+  figure { margin: 20px 0; }
+  figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; text-align: center; }
+  svg { display: block; width: 100%; height: auto; background: #0b0d11; border: 1px solid var(--line); border-radius: 10px; }
+  .legend { font-size: 13px; color: var(--muted); display: flex; gap: 18px; flex-wrap: wrap; margin: 8px 2px; }
+  .swatch { display: inline-block; width: 22px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 32px 0; }
+  .kv { display: grid; grid-template-columns: 180px 1fr; gap: 4px 16px; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  @media print {
+    body { background: #fff; color: #000; }
+    .wrap { max-width: none; }
+    svg { background: #fff; border-color: #bbb; }
+    h2 { border-color: #bbb; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Overhead Cable Animal Deterrent <span class="pill">Build Plan v1</span></h1>
+  <p class="sub">Passive carriage on a powered twine loop. One DC motor, limit-switch reversal, ESP32 trigger. Companion to the rabbit-detector camera + server system.</p>
+
+  <div class="panel note">
+    <strong>Concept in one line:</strong> a fixed DC motor drives a continuous loop of fishing line strung between two metal posts. A light, dumb (passive) carriage hangs on the loop. On a rabbit detection, the server tells the ESP32 to run the motor; the carriage shuttles end to end, and limit switches flip the motor direction at each post. Overhead motion + a hawk-silhouette/streamer mimics an aerial predator.
+  </div>
+
+  <h2>1. How it works</h2>
+  <ol>
+    <li><strong>Idle:</strong> ESP32 sleeps with WiFi associated, listening for a trigger from the server.</li>
+    <li><strong>Trigger:</strong> server detection loop hits <code>ALERT</code> → sends a message (HTTP/MQTT/ESP-NOW) → ESP32 wakes.</li>
+    <li><strong>Run:</strong> ESP32 drives the H-bridge, motor pulls the loop, carriage travels toward the far post.</li>
+    <li><strong>Reverse:</strong> carriage trips the far limit switch → ESP32 reverses motor direction → carriage returns.</li>
+    <li><strong>Stop:</strong> carriage trips the home limit switch → ESP32 stops the motor → back to idle. Repeat for N passes per alert if desired.</li>
+  </ol>
+  <p>Because motion is constrained to one dimension, there is no obstacle avoidance, no localization, and no docking problem. "Home" is just the home-end limit switch.</p>
+
+  <h2>2. Mechanical layout</h2>
+  <figure>
+    <svg viewBox="0 0 880 280" role="img" aria-label="Mechanical layout diagram">
+      <!-- ground -->
+      <rect x="0" y="250" width="880" height="30" fill="#1c2230"/>
+      <line x1="0" y1="250" x2="880" y2="250" stroke="#3a4456" stroke-width="2"/>
+      <!-- posts -->
+      <rect x="90" y="60" width="14" height="200" fill="#8a93a6"/>
+      <rect x="776" y="60" width="14" height="200" fill="#8a93a6"/>
+      <text x="97" y="276" fill="#9aa3b2" font-size="12" text-anchor="middle">HOME post</text>
+      <text x="783" y="276" fill="#9aa3b2" font-size="12" text-anchor="middle">FAR post</text>
+      <!-- pulleys -->
+      <circle cx="118" cy="90" r="16" fill="none" stroke="#6fb3ff" stroke-width="4"/>
+      <circle cx="762" cy="90" r="16" fill="none" stroke="#6fb3ff" stroke-width="4"/>
+      <text x="118" y="50" fill="#6fb3ff" font-size="12" text-anchor="middle">drive pulley</text>
+      <text x="762" y="50" fill="#6fb3ff" font-size="12" text-anchor="middle">idler pulley</text>
+      <!-- loop (twine) top and bottom runs -->
+      <line x1="118" y1="80" x2="762" y2="80" stroke="#ffb454" stroke-width="3"/>
+      <line x1="118" y1="100" x2="762" y2="100" stroke="#ffb454" stroke-width="3"/>
+      <!-- carriage -->
+      <g>
+        <rect x="400" y="70" width="70" height="40" rx="6" fill="#23303f" stroke="#5ad17a" stroke-width="2"/>
+        <text x="435" y="94" fill="#5ad17a" font-size="11" text-anchor="middle">carriage</text>
+        <!-- hawk silhouette hint -->
+        <path d="M430 118 L420 132 L435 126 L450 132 L440 118 Z" fill="#5ad17a"/>
+      </g>
+      <!-- motor at home post base -->
+      <rect x="70" y="200" width="54" height="40" rx="5" fill="#2a2f3a" stroke="#ff6b6b" stroke-width="2"/>
+      <text x="97" y="224" fill="#ff6b6b" font-size="11" text-anchor="middle">motor +</text>
+      <text x="97" y="236" fill="#ff6b6b" font-size="11" text-anchor="middle">drive box</text>
+      <line x1="111" y1="200" x2="118" y2="106" stroke="#6fb3ff" stroke-width="2" stroke-dasharray="4 3"/>
+      <!-- limit switches -->
+      <rect x="138" y="84" width="10" height="12" fill="#ff6b6b"/>
+      <rect x="732" y="84" width="10" height="12" fill="#ff6b6b"/>
+      <text x="170" y="76" fill="#ff6b6b" font-size="11">LIMIT home</text>
+      <text x="700" y="76" fill="#ff6b6b" font-size="11">LIMIT far</text>
+    </svg>
+    <figcaption>Continuous-loop ("ski lift") drive. Motor and all electronics stay fixed in the home-post box; the carriage carries nothing but a passive hawk silhouette/streamers.</figcaption>
+  </figure>
+
+  <ul>
+    <li><strong>Posts:</strong> metal, driven into the dirt. Add a guy-line or a deadman anchor if the span is long; loop tension pulls the post tops toward each other.</li>
+    <li><strong>Loop:</strong> braided fishing line or twine in a closed loop around two pulleys. Braided line resists stretch better than mono; twine is grippier on the drive pulley.</li>
+    <li><strong>Drive pulley:</strong> 3D-printed, on the motor shaft. Add a rubber band / TPU tire or a V-groove so the line does not slip.</li>
+    <li><strong>Tension:</strong> make the idler pulley position adjustable (slot + bolt) so you can take up slack. A spring-loaded idler keeps tension as the line stretches and temperature changes.</li>
+    <li><strong>Carriage:</strong> clamps to one run of the loop so it moves with the line. Keep it light to reduce sag and motor load.</li>
+  </ul>
+
+  <h2>3. Bill of materials</h2>
+  <table>
+    <tr><th>Item</th><th>Choice</th><th>Notes</th></tr>
+    <tr><td>Microcontroller</td><td>Adafruit HUZZAH32 ESP32 Feather</td><td>3.3V logic, onboard LiPo charger + JST, battery monitor on A13. ~200mA active with WiFi.</td></tr>
+    <tr><td>Motor driver</td><td>Toshiba TB6612FNG (dual H-bridge breakout)</td><td>VM 2.5–13.5V, VCC 2.7–5.5V logic, 1.2A continuous / 3.2A peak per channel. One motor uses channel A. See current note below.</td></tr>
+    <tr><td>Motor</td><td>Brushed DC, matched to LiPo voltage</td><td>Measure its running and stall current before sizing battery + driver.</td></tr>
+    <tr><td>Limit switches</td><td>2× microswitch (lever, NO contact)</td><td>One per post. Wired to GND, ESP32 reads with internal pull-up.</td></tr>
+    <tr><td>Loop line</td><td>Braided fishing line or twine</td><td>Closed loop around two pulleys.</td></tr>
+    <tr><td>Battery</td><td>1S LiPo, capacity in section 6</td><td>Powers ESP32 (via JST) and motor (tapped at BAT).</td></tr>
+    <tr><td>Printed parts</td><td>Pulleys, carriage, motor mount, switch brackets, enclosure</td><td>Use a weather-tolerant filament (PETG/ASA, not PLA, for outdoor sun).</td></tr>
+  </table>
+
+  <div class="panel note">
+    <strong>TB6612FNG quick facts.</strong> Dual H-bridge, so two motor channels (A and B). You only need <strong>channel A</strong> for one motor. Each channel handles <strong>1.2A continuous, 3.2A peak</strong>. Control per channel is 3 lines: <code>AIN1</code>, <code>AIN2</code> (direction) and <code>PWMA</code> (speed/enable). A shared <code>STBY</code> pin must be HIGH to enable the chip at all. Two supplies: <code>VM</code> = motor voltage (your LiPo), <code>VCC</code> = logic (3.3V from the Feather).
+  </div>
+  <div class="panel warn">
+    <strong>Current headroom.</strong> 1.2A continuous per channel is modest. If your motor's running current is near or above ~1A, <strong>parallel the two channels</strong>: tie <code>AIN1+BIN1</code>, <code>AIN2+BIN2</code>, <code>PWMA+PWMB</code>, and join <code>AO1+BO1</code> and <code>AO2+BO2</code>. That roughly doubles capacity to ~2.4A continuous / 6.4A peak. Otherwise pick a low-current motor and add a firmware stall timeout (the sketch has one).
+  </div>
+
+  <h2>4. Wiring — connection table</h2>
+  <p>This table is the authoritative reference. The diagram in section 5 is the visual of the same connections.</p>
+  <table>
+    <tr><th>From</th><th>To</th><th>Purpose</th></tr>
+    <tr><td>LiPo JST</td><td>Feather JST port</td><td>Battery in; Feather charges it over USB and regulates 3.3V.</td></tr>
+    <tr><td>Feather <code>BAT</code></td><td>TB6612 <code>VM</code></td><td>Raw LiPo voltage to the motor supply (NOT the 3.3V rail — the Feather regulator is only 500mA).</td></tr>
+    <tr><td>Feather <code>3V</code></td><td>TB6612 <code>VCC</code></td><td>Logic supply for the driver, 3.3V.</td></tr>
+    <tr><td>Feather <code>GND</code></td><td>TB6612 <code>GND</code> + LiPo <code>GND</code></td><td>Common ground. Required.</td></tr>
+    <tr><td>Feather <code>GPIO21</code></td><td>TB6612 <code>AIN1</code></td><td>Channel A direction bit 1.</td></tr>
+    <tr><td>Feather <code>GPIO27</code></td><td>TB6612 <code>AIN2</code></td><td>Channel A direction bit 2.</td></tr>
+    <tr><td>Feather <code>GPIO33</code></td><td>TB6612 <code>PWMA</code></td><td>Channel A speed/enable. Tie high for full speed or PWM it.</td></tr>
+    <tr><td>Feather <code>GPIO13</code></td><td>TB6612 <code>STBY</code></td><td>Must be HIGH to enable the chip. Driving from a GPIO lets you pull it LOW to cut current in sleep. (Or just tie to 3V.)</td></tr>
+    <tr><td>TB6612 <code>AO1/AO2</code></td><td>DC motor terminals</td><td>Channel A output. (Parallel with BO1/BO2 if you doubled up the channels.)</td></tr>
+    <tr><td>Feather <code>GPIO14</code></td><td>Home limit switch → <code>GND</code></td><td><code>INPUT_PULLUP</code>; reads LOW when pressed.</td></tr>
+    <tr><td>Feather <code>GPIO32</code></td><td>Far limit switch → <code>GND</code></td><td><code>INPUT_PULLUP</code>; reads LOW when pressed.</td></tr>
+  </table>
+
+  <div class="panel warn">
+    <strong>Pin choice notes.</strong> Avoid ESP32 strapping pins for outputs (GPIO0, 2, 5, 12, 15) — a driver input pulling them at boot can stop the ESP32 from starting. GPIO21/27/33/14/32 above are all safe general-purpose pins on the HUZZAH32. GPIO34/35/36/39 are input-only and have <em>no</em> internal pull-ups, so they are wrong for the limit switches unless you add external pull-up resistors. Add a 0.1µF cap across each switch or debounce in firmware.
+  </div>
+
+  <h2>5. Wiring diagram</h2>
+  <div class="legend">
+    <span><span class="swatch" style="background:#ff6b6b"></span>Power (LiPo / motor)</span>
+    <span><span class="swatch" style="background:#6fb3ff"></span>Logic / signal</span>
+    <span><span class="swatch" style="background:#9aa3b2"></span>Ground</span>
+  </div>
+  <figure>
+    <svg viewBox="0 0 880 470" role="img" aria-label="Wiring diagram">
+      <!-- LiPo -->
+      <rect x="30" y="40" width="120" height="70" rx="8" fill="#171a21" stroke="#ff6b6b" stroke-width="2"/>
+      <text x="90" y="70" fill="#e6e8ec" font-size="14" text-anchor="middle" font-weight="bold">1S LiPo</text>
+      <text x="90" y="90" fill="#9aa3b2" font-size="11" text-anchor="middle">3.7V nom</text>
+      <text x="55" y="106" fill="#ff6b6b" font-size="11">+</text>
+      <text x="135" y="106" fill="#9aa3b2" font-size="11">−</text>
+
+      <!-- ESP32 Feather -->
+      <rect x="30" y="170" width="180" height="240" rx="10" fill="#171a21" stroke="#6fb3ff" stroke-width="2"/>
+      <text x="120" y="196" fill="#e6e8ec" font-size="15" text-anchor="middle" font-weight="bold">ESP32 Feather</text>
+      <text x="120" y="214" fill="#9aa3b2" font-size="11" text-anchor="middle">HUZZAH32</text>
+      <!-- left pins -->
+      <text x="44" y="244" fill="#ff6b6b" font-size="12">JST ◀ LiPo</text>
+      <text x="44" y="272" fill="#ff6b6b" font-size="12">BAT</text>
+      <text x="44" y="300" fill="#6fb3ff" font-size="12">3V</text>
+      <text x="44" y="328" fill="#9aa3b2" font-size="12">GND</text>
+      <!-- right pins -->
+      <text x="196" y="244" fill="#6fb3ff" font-size="12" text-anchor="end">GPIO21</text>
+      <text x="196" y="272" fill="#6fb3ff" font-size="12" text-anchor="end">GPIO27</text>
+      <text x="196" y="300" fill="#6fb3ff" font-size="12" text-anchor="end">GPIO33</text>
+      <text x="196" y="328" fill="#6fb3ff" font-size="12" text-anchor="end">GPIO13</text>
+      <text x="196" y="356" fill="#6fb3ff" font-size="12" text-anchor="end">GPIO14</text>
+      <text x="196" y="384" fill="#6fb3ff" font-size="12" text-anchor="end">GPIO32</text>
+
+      <!-- LiPo to Feather JST -->
+      <line x1="90" y1="110" x2="90" y2="170" stroke="#ff6b6b" stroke-width="2"/>
+      <polygon points="86,168 94,168 90,174" fill="#ff6b6b"/>
+
+      <!-- Motor driver -->
+      <rect x="420" y="160" width="200" height="180" rx="10" fill="#171a21" stroke="#ffb454" stroke-width="2"/>
+      <text x="520" y="186" fill="#e6e8ec" font-size="15" text-anchor="middle" font-weight="bold">TB6612FNG</text>
+      <text x="520" y="204" fill="#9aa3b2" font-size="11" text-anchor="middle">(channel A)</text>
+      <text x="434" y="232" fill="#ff6b6b" font-size="12">VM</text>
+      <text x="434" y="256" fill="#6fb3ff" font-size="12">AIN1</text>
+      <text x="434" y="280" fill="#6fb3ff" font-size="12">AIN2</text>
+      <text x="434" y="304" fill="#6fb3ff" font-size="12">PWMA</text>
+      <text x="434" y="328" fill="#6fb3ff" font-size="12">STBY</text>
+      <text x="606" y="232" fill="#ff6b6b" font-size="12" text-anchor="end">AO1</text>
+      <text x="606" y="256" fill="#ff6b6b" font-size="12" text-anchor="end">AO2</text>
+      <text x="606" y="304" fill="#9aa3b2" font-size="12" text-anchor="end">GND</text>
+      <text x="606" y="328" fill="#6fb3ff" font-size="11" text-anchor="end">VCC←3V</text>
+
+      <!-- BAT to VM -->
+      <line x1="92" y1="272" x2="420" y2="232" stroke="#ff6b6b" stroke-width="2"/>
+      <!-- GPIO21 to IN1 -->
+      <line x1="210" y1="240" x2="420" y2="260" stroke="#6fb3ff" stroke-width="2"/>
+      <!-- GPIO27 to IN2 -->
+      <line x1="210" y1="268" x2="420" y2="288" stroke="#6fb3ff" stroke-width="2"/>
+      <!-- GPIO33 to PWMA -->
+      <line x1="210" y1="296" x2="420" y2="300" stroke="#6fb3ff" stroke-width="2"/>
+      <!-- GPIO13 to STBY -->
+      <line x1="210" y1="324" x2="420" y2="324" stroke="#6fb3ff" stroke-width="2"/>
+
+      <!-- Motor -->
+      <circle cx="740" cy="220" r="42" fill="#171a21" stroke="#ff6b6b" stroke-width="2"/>
+      <text x="740" y="216" fill="#e6e8ec" font-size="14" text-anchor="middle" font-weight="bold">DC</text>
+      <text x="740" y="232" fill="#e6e8ec" font-size="14" text-anchor="middle" font-weight="bold">motor</text>
+      <line x1="620" y1="232" x2="700" y2="214" stroke="#ff6b6b" stroke-width="2"/>
+      <line x1="620" y1="260" x2="700" y2="232" stroke="#ff6b6b" stroke-width="2"/>
+
+      <!-- Ground bus -->
+      <line x1="90" y1="328" x2="90" y2="440" stroke="#9aa3b2" stroke-width="2"/>
+      <line x1="90" y1="440" x2="600" y2="440" stroke="#9aa3b2" stroke-width="2"/>
+      <line x1="600" y1="440" x2="600" y2="324" stroke="#9aa3b2" stroke-width="2"/>
+      <line x1="150" y1="100" x2="150" y2="440" stroke="#9aa3b2" stroke-width="2"/>
+      <text x="300" y="456" fill="#9aa3b2" font-size="11" text-anchor="middle">common ground bus (LiPo − , Feather GND, driver GND)</text>
+
+      <!-- Limit switches -->
+      <rect x="300" y="360" width="90" height="34" rx="5" fill="#171a21" stroke="#ff6b6b" stroke-width="2"/>
+      <text x="345" y="381" fill="#e6e8ec" font-size="11" text-anchor="middle">LIMIT home</text>
+      <line x1="210" y1="352" x2="300" y2="372" stroke="#6fb3ff" stroke-width="2"/>
+      <line x1="345" y1="394" x2="345" y2="440" stroke="#9aa3b2" stroke-width="2"/>
+
+      <rect x="300" y="404" width="90" height="34" rx="5" fill="#171a21" stroke="#ff6b6b" stroke-width="2"/>
+      <text x="345" y="425" fill="#e6e8ec" font-size="11" text-anchor="middle">LIMIT far</text>
+      <line x1="210" y1="380" x2="300" y2="416" stroke="#6fb3ff" stroke-width="2"/>
+      <line x1="390" y1="421" x2="600" y2="421" stroke="#9aa3b2" stroke-width="1.5"/>
+    </svg>
+    <figcaption>Power (red): LiPo → Feather JST, and LiPo → TB6612 VM via the BAT pin. Signals (blue): GPIO21/27/33 → AIN1/AIN2/PWMA, GPIO13 → STBY, GPIO14/32 → limit switches. VCC from 3V. All grounds tied together. Motor wired across AO1/AO2.</figcaption>
+  </figure>
+
+  <h2>6. LiPo sizing <span class="pill">the calc you asked for</span></h2>
+  <p>Two loads: the ESP32 sitting idle 24/7, and the motor running in short bursts on each detection. The surprise is that <strong>the ESP32's idle current dominates the daily budget, not the motor</strong>, exactly like the main rig. Your battery size is decided mostly by which ESP32 sleep mode you use.</p>
+
+  <h3>Formula</h3>
+  <pre><code>daily_mAh = I_idle(mA) × 24
+          + N × I_motor(mA) × (t_run / 3600)
+
+battery_mAh = daily_mAh × days / DoD     (DoD = usable fraction, use 0.8)</code></pre>
+
+  <h3>Assumptions (edit these to your hardware)</h3>
+  <div class="kv">
+    <div>I_motor (running)</div><div>1.0 A = 1000 mA  <em>(placeholder — measure yours)</em></div>
+    <div>t_run per activation</div><div>30 s (full round trip)</div>
+    <div>N activations / day</div><div>20</div>
+    <div>DoD (usable)</div><div>0.8 (don't fully drain a LiPo)</div>
+  </div>
+  <p>Motor energy is then fixed at <code>20 × 1000 × (30/3600) ≈ 167 mAh/day</code>. The ESP32 idle term is what swings the result:</p>
+
+  <h3>Battery needed vs ESP32 power strategy</h3>
+  <table>
+    <tr><th>ESP32 idle mode</th><th>I_idle</th><th>Idle mAh/day</th><th>+ motor</th><th>1 day</th><th>3 days</th><th>7 days</th></tr>
+    <tr><td>WiFi always on</td><td>~200 mA</td><td>4800</td><td>4967</td><td class="red">6200</td><td class="red">~18.6 Ah</td><td class="red">~43 Ah</td></tr>
+    <tr><td>Modem sleep (DTIM)</td><td>~20 mA</td><td>480</td><td>647</td><td>810</td><td>2400</td><td>5700</td></tr>
+    <tr><td class="good">Light sleep (DTIM)</td><td>~2 mA</td><td>48</td><td>215</td><td>270</td><td>810</td><td><strong>1900</strong></td></tr>
+    <tr><td>Deep sleep + GPIO wake</td><td>~0.05 mA</td><td>1.2</td><td>168</td><td>210</td><td>630</td><td>1470</td></tr>
+  </table>
+  <p class="sub">All cells are required battery capacity in mAh (after the ÷0.8 DoD margin), rounded. Motor term held at 167 mAh/day.</p>
+
+  <div class="panel note">
+    <strong>Recommendation:</strong> use <strong>light sleep with WiFi kept associated</strong>. Idle drops to ~2mA, the board still wakes on an incoming packet within a DTIM interval (sub-second), and a <strong>2000 mAh 1S LiPo gives ~7 days</strong> — matching the main camera rig's recharge cadence. If you can run a trigger wire from the Pi/server side to a Feather GPIO, deep-sleep + ext-wake is even better, but then the motor burst becomes the dominant load and there's little gained over light sleep. Always-on WiFi is a non-starter outdoors: a week needs a ~40Ah pack.
+  </div>
+
+  <div class="panel warn">
+    <strong>Two things the daily-mAh number does NOT cover — size for these separately:</strong>
+    <ul>
+      <li><strong>Peak / stall current.</strong> At startup and if the carriage jams, the motor pulls its stall current (often several A, much higher than running). This is where the TB6612 bites: a single channel is only <strong>1.2A continuous / 3.2A peak</strong>. If stall exceeds that, parallel both channels (section 3) or pick a smaller motor. The LiPo's burst C-rating must also clear stall: a 2000mAh pack at 1A is 0.5C (easy), at 6A it's 3C (check the cell). The firmware stall timeout cuts the motor before the driver overheats.</li>
+      <li><strong>Recharge path.</strong> The Feather charges the LiPo over USB at 100mA default (raise to ~500mA with the charge-rate resistor mod). To run truly unattended, feed USB from a small solar panel + charge controller, or swap packs.</li>
+    </ul>
+  </div>
+
+  <h3>Plug in your real motor</h3>
+  <p>Once you measure the motor's running current and your actual cable length (which sets <code>t_run</code>), redo just the motor term. Example: a longer 25 m span at ~1 m/s is ~50 s round trip; at 1.5 A that's <code>20 × 1500 × (50/3600) ≈ 417 mAh/day</code> for the motor. Add to the idle term for your chosen sleep mode, then ×days ÷0.8.</p>
+
+  <h2>7. Firmware sketch (ESP32 / Arduino)</h2>
+  <pre><code>const int AIN1 = 21, AIN2 = 27, PWMA = 33, STBY = 13;  // TB6612 channel A
+const int LIM_HOME = 14, LIM_FAR = 32;                  // limit switches (NO to GND)
+const int PASSES   = 4;                                  // shuttles per alert
+
+void setup() {
+  pinMode(AIN1, OUTPUT); pinMode(AIN2, OUTPUT);
+  pinMode(PWMA, OUTPUT); pinMode(STBY, OUTPUT);
+  pinMode(LIM_HOME, INPUT_PULLUP);
+  pinMode(LIM_FAR,  INPUT_PULLUP);
+  motorStop();
+  // connect WiFi, subscribe to trigger (MQTT topic / HTTP endpoint / ESP-NOW)
+}
+
+void driveUntil(int limitPin, bool forward) {
+  forward ? motorFwd() : motorRev();
+  unsigned long t0 = millis();
+  while (digitalRead(limitPin) == HIGH) {     // HIGH = not pressed (pull-up)
+    if (millis() - t0 > 8000) break;          // stall timeout, protects motor
+    delay(5);
+  }
+  motorStop();
+}
+
+void runDeterrent() {
+  for (int i = 0; i &lt; PASSES; i++) {
+    driveUntil(LIM_FAR,  true);               // out to far post
+    driveUntil(LIM_HOME, false);              // back home
+  }
+}
+
+// TB6612: STBY must be HIGH to drive; PWMA sets speed (HIGH = full).
+void motorFwd()  { digitalWrite(STBY, HIGH); digitalWrite(AIN1, HIGH); digitalWrite(AIN2, LOW);  digitalWrite(PWMA, HIGH); }
+void motorRev()  { digitalWrite(STBY, HIGH); digitalWrite(AIN1, LOW);  digitalWrite(AIN2, HIGH); digitalWrite(PWMA, HIGH); }
+void motorStop() { digitalWrite(PWMA, LOW);  digitalWrite(AIN1, LOW);  digitalWrite(AIN2, LOW);  digitalWrite(STBY, LOW); }</code></pre>
+  <p class="sub">Pulling <code>STBY</code> LOW in <code>motorStop()</code> drops the driver into standby (~µA) between alerts. Use <code>ledcWrite</code> on <code>PWMA</code> if you want speed control instead of full-on. Add debouncing on the limit reads and enter light sleep between alerts.</p>
+
+  <h2>8. Server integration</h2>
+  <p>The detection already exists. On the server side, when the state machine transitions to <code>ALERT</code>, publish a trigger the ESP32 is listening for. Cleanest option for an intermittent listener is MQTT (broker on the A6000 cluster, ESP32 subscribes), or ESP-NOW if a second ESP32 sits next to the server. Reuse the same <code>ALERT</code> hook you'd use for any deterrent action.</p>
+
+  <h2>9. Build order</h2>
+  <ol>
+    <li><strong>Bench test the drive.</strong> Motor + driver + ESP32 on a short loop on the desk. Confirm direction control and limit-switch reversal before going outside.</li>
+    <li><strong>Measure motor current</strong> (running + stall) and finalize battery capacity from section 6.</li>
+    <li><strong>Rig the cable.</strong> Posts, pulleys, tensioned loop, carriage. Verify it shuttles smoothly by hand, then under power.</li>
+    <li><strong>Mount limit switches</strong> at both posts; tune trip positions.</li>
+    <li><strong>Trigger integration.</strong> Wire the server <code>ALERT</code> → ESP32. End to end test with a real detection.</li>
+    <li><strong>Weatherproof</strong> the home-post electronics box, switch to PETG/ASA prints, add the solar/USB recharge path.</li>
+  </ol>
+
+  <hr>
+  <p class="sub">Open question to close out: measure the motor's running and stall current. That sets the final battery capacity (section 6) and decides whether one TB6612 channel is enough or you need to parallel both.</p>
+
+</div>
+</body>
+</html>
