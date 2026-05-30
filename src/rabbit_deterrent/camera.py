@@ -18,6 +18,19 @@ logger = logging.getLogger(__name__)
 LUX_DAY_THRESHOLD = 50.0   # in night profile: switch to day if Lux > this
 LUX_NIGHT_THRESHOLD = 5.0  # in day profile: switch to night if Lux < this
 
+# Auto-exposure railing is the reliable day→night trigger. Lux alone fails on the
+# Arducam day-night camera: at night its IR LEDs flood the scene and the IR-cut
+# filter opens, so day-profile metering reports Lux in the 5–50 dead zone and
+# never crosses LUX_NIGHT_THRESHOLD — the camera stays stuck in day exposure until
+# a restart forces profile="night" from a cold libcamera. When day-profile AE
+# instead pushes ExposureTime to its ceiling, the scene is genuinely dark no
+# matter what Lux claims, so we switch on that. In daylight (even heavy overcast)
+# AE picks a few ms, nowhere near the 100ms ceiling, so this won't false-trigger.
+DAY_AE_RAIL_FRACTION = 0.9   # ExposureTime >= this * day ceiling means AE ran out of light
+DAY_TO_NIGHT_FRAMES = 3      # consecutive dark/railed frames before switching to night
+
+STATUS_LOG_INTERVAL_S = 60.0  # throttle for the INFO heartbeat that logs lux/exposure/gain
+
 # Dark-frame recovery. A wedged sensor or manual exposure controls that haven't
 # settled can return near-black night frames even though capture() reopens the
 # device on every call. After several consecutive dark night frames we reopen
@@ -40,7 +53,9 @@ class CameraCapture:
         self._profile = "night"  # safer default; first capture's Lux flips us to day if it's actually bright
         self._cam = None
         self._consecutive_dark = 0   # consecutive near-black night frames
+        self._dark_ae_ticks = 0      # consecutive day frames where AE has railed / Lux is low
         self._recover_next = False   # next capture() should reopen with extra settle frames
+        self._last_status_log = 0.0  # monotonic time of the last lux/exposure heartbeat
 
     def _active_cfg(self) -> "CameraConfig":
         return self._day_cfg if self._profile == "day" else self._night_cfg
@@ -67,13 +82,51 @@ class CameraCapture:
             ctrl["ColourGains"] = (c.red_gain, c.blue_gain)
         return ctrl
 
-    def _update_profile_from_lux(self, lux: float) -> None:
-        if self._profile == "night" and lux > LUX_DAY_THRESHOLD:
-            logger.info("Lux=%.1f → switching to day profile", lux)
-            self._profile = "day"
-        elif self._profile == "day" and lux < LUX_NIGHT_THRESHOLD:
-            logger.info("Lux=%.1f → switching to night profile", lux)
-            self._profile = "night"
+    def _update_profile(self, lux: float, exposure_us: float, gain: float) -> None:
+        """Pick the day/night profile for the NEXT capture from this frame's metadata.
+
+        Night→day keys off Lux: daylight saturates the meter so Lux > 50 is
+        unambiguous. Day→night cannot trust Lux alone (see DAY_AE_RAIL_FRACTION),
+        so it also fires when day-profile AE has railed its exposure for several
+        consecutive frames. Either way, a switch arms a recovery reopen so the new
+        profile's controls actually apply on the next capture — the same thing a
+        manual restart was doing by hand.
+        """
+        if self._profile == "night":
+            if lux > LUX_DAY_THRESHOLD:
+                logger.info("Lux=%.1f → switching to day profile", lux)
+                self._profile = "day"
+                self._dark_ae_ticks = 0
+                self._recover_next = True
+            return
+
+        # Day profile: decide whether it has gotten dark.
+        ceiling_us = self._day_cfg.max_exposure_seconds * 1_000_000
+        ae_railed = exposure_us >= DAY_AE_RAIL_FRACTION * ceiling_us
+        if lux < LUX_NIGHT_THRESHOLD or ae_railed:
+            self._dark_ae_ticks += 1
+            logger.info(
+                "Dark day frame (Lux=%.1f, exp=%.0fus, gain=%.2f, %d/%d)",
+                lux, exposure_us, gain, self._dark_ae_ticks, DAY_TO_NIGHT_FRAMES,
+            )
+            if self._dark_ae_ticks >= DAY_TO_NIGHT_FRAMES:
+                logger.info("Lux=%.1f, exp=%.0fus → switching to night profile", lux, exposure_us)
+                self._profile = "night"
+                self._dark_ae_ticks = 0
+                self._recover_next = True
+        else:
+            self._dark_ae_ticks = 0
+
+    def _maybe_log_status(self, lux: float, exposure_us: float, gain: float, mean: float) -> None:
+        """Throttled INFO heartbeat so the day/night transition is observable in journalctl."""
+        now = time.monotonic()
+        if now - self._last_status_log < STATUS_LOG_INTERVAL_S:
+            return
+        self._last_status_log = now
+        logger.info(
+            "Camera status: profile=%s lux=%.1f exp=%.0fus gain=%.2f mean=%.1f",
+            self._profile, lux, exposure_us, gain, mean,
+        )
 
     @property
     def profile(self) -> str:
@@ -100,7 +153,7 @@ class CameraCapture:
         if extra:
             cam.set_controls(extra)
         if recovering:
-            logger.warning("Dark-frame recovery: reopening with %d settle frames", settle)
+            logger.warning("Reopening camera with %d settle frames (profile switch or dark-frame recovery)", settle)
             time.sleep(0.5)  # give the freshly applied manual controls a moment before discarding
         for _ in range(settle):
             cam.capture_array()  # discard: let AE / manual controls settle before the real shot
@@ -111,13 +164,18 @@ class CameraCapture:
         cam.stop()
         cam.close()
         logger.debug("Captured frame %dx%d (profile=%s)", frame.shape[1], frame.shape[0], self._profile)
+        lux = float(meta.get("Lux", 0.0))
+        exposure_us = float(meta.get("ExposureTime", 0.0))
+        gain = float(meta.get("AnalogueGain", 0.0))
+        self._maybe_log_status(lux, exposure_us, gain, float(frame.mean()))
         # Darkness is judged against the profile used for THIS frame, before the
-        # Lux reading below may flip the profile for the next capture.
+        # metadata below may flip the profile for the next capture.
         self._check_dark_frame(frame)
-        # Lux from current frame drives the NEXT capture's profile. A saturated
-        # night-profile frame in daylight still reports a high Lux, which correctly
-        # triggers the switch on the following tick.
-        self._update_profile_from_lux(float(meta.get("Lux", 0.0)))
+        # This frame's metadata drives the NEXT capture's profile. A saturated
+        # night-profile frame in daylight reports a high Lux; a day-profile frame
+        # whose AE has railed its exposure reports the scene is dark. Either one
+        # correctly triggers a switch on the following tick.
+        self._update_profile(lux, exposure_us, gain)
         return frame
 
     def _check_dark_frame(self, frame: np.ndarray) -> None:
