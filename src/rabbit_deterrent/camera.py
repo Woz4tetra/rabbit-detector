@@ -23,10 +23,19 @@ LUX_NIGHT_THRESHOLD = 5.0  # in day profile: switch to night if Lux < this
 # filter opens, so day-profile metering reports Lux in the 5–50 dead zone and
 # never crosses LUX_NIGHT_THRESHOLD — the camera stays stuck in day exposure until
 # a restart forces profile="night" from a cold libcamera. When day-profile AE
-# instead pushes ExposureTime to its ceiling, the scene is genuinely dark no
-# matter what Lux claims, so we switch on that. In daylight (even heavy overcast)
-# AE picks a few ms, nowhere near the 100ms ceiling, so this won't false-trigger.
+# runs out of light, the scene is genuinely dark no matter what Lux claims, so we
+# switch on that. In daylight (even heavy overcast) AE picks a few ms at unity
+# gain, nowhere near these ceilings, so this won't false-trigger.
+#
+# AE has two knobs and rails them independently: it raises ExposureTime toward the
+# frame-duration ceiling AND raises AnalogueGain toward the sensor max. The
+# original fix only watched ExposureTime, but in the field this AE rails GAIN to
+# its 8.0 max while parking ExposureTime at ~66ms (well under the 90ms rail) —
+# observed in journalctl as "profile=day lux=18 exp=66653us gain=8.00" looping for
+# hours without switching. So we treat a railed gain as an equally valid "out of
+# light" signal. Either knob hitting its rail means it's night.
 DAY_AE_RAIL_FRACTION = 0.9   # ExposureTime >= this * day ceiling means AE ran out of light
+DAY_GAIN_RAIL_THRESHOLD = 4.0  # AnalogueGain >= this means AE maxed sensor gain (OV5647 max is 8.0)
 DAY_TO_NIGHT_FRAMES = 3      # consecutive dark/railed frames before switching to night
 
 STATUS_LOG_INTERVAL_S = 60.0  # throttle for the INFO heartbeat that logs lux/exposure/gain
@@ -100,10 +109,13 @@ class CameraCapture:
                 self._recover_next = True
             return
 
-        # Day profile: decide whether it has gotten dark.
+        # Day profile: decide whether it has gotten dark. AE rails either knob
+        # (ExposureTime toward the frame-duration ceiling, AnalogueGain toward the
+        # sensor max); either one railing means it ran out of light.
         ceiling_us = self._day_cfg.max_exposure_seconds * 1_000_000
         ae_railed = exposure_us >= DAY_AE_RAIL_FRACTION * ceiling_us
-        if lux < LUX_NIGHT_THRESHOLD or ae_railed:
+        gain_railed = gain >= DAY_GAIN_RAIL_THRESHOLD
+        if lux < LUX_NIGHT_THRESHOLD or ae_railed or gain_railed:
             self._dark_ae_ticks += 1
             logger.info(
                 "Dark day frame (Lux=%.1f, exp=%.0fus, gain=%.2f, %d/%d)",
