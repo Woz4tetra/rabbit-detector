@@ -178,7 +178,6 @@ def main() -> None:
 
     print("\n=== SUMMARY ===")
     print(f"frames processed:   {len(frames)}")
-    print(f"detect() calls:     {detect_calls}")
     print(f"old detections:     {len(old)}")
     print(f"new detections:     {len(new)}")
     print(f"new-only (added):   {len(new_only)}")
