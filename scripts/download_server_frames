@@ -4,6 +4,8 @@ set -e
 REMOTE_HOST="ben@megamind"
 REMOTE_FRAMES="/home/ben/rabbit-detector/data/server-frames/"
 LOCAL_FRAMES="/home/ben/rabbit-detector/data/server-frames/"
+REMOTE_DETECTIONS="/home/ben/rabbit-detector/data/detections.jsonl"
+LOCAL_DETECTIONS="/home/ben/rabbit-detector/data/detections.jsonl"
 RSYNC_EXTRA="--ignore-existing"
 
 for arg in "$@"; do
@@ -17,5 +19,10 @@ mkdir -p "$LOCAL_FRAMES"
 
 echo "Syncing frames from server..."
 rsync --progress -av $RSYNC_EXTRA "$REMOTE_HOST:$REMOTE_FRAMES" "$LOCAL_FRAMES"
+
+# The detection log labels which frames contain rabbits; make_timelapse.py reads
+# it to exclude those frames. Always pull the latest copy (no --ignore-existing).
+echo "Syncing detection log from server..."
+rsync --progress -av "$REMOTE_HOST:$REMOTE_DETECTIONS" "$LOCAL_DETECTIONS"
 
 echo "Done. Frames synced to $LOCAL_FRAMES"

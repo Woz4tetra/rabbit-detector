@@ -25,6 +25,26 @@ def parse_timestamp(name: str) -> datetime | None:
         return None
 
 
+def load_detection_frames(path: Path) -> set[str]:
+    """Return the set of frame filenames labeled as rabbit detections."""
+    detected: set[str] = set()
+    if not path.exists():
+        return detected
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            frame = record.get("frame")
+            if frame:
+                detected.add(frame)
+    return detected
+
+
 def window_start(dt: datetime) -> datetime:
     """Return the 8 AM ET anchor of the 24-hour window this timestamp falls in."""
     et = dt.astimezone(EASTERN)
@@ -97,6 +117,12 @@ def main() -> None:
         type=Path,
         default=PROJECT_ROOT / "data" / "timelapses",
     )
+    parser.add_argument(
+        "--detections",
+        type=Path,
+        default=PROJECT_ROOT / "data" / "detections.jsonl",
+        help="JSONL of rabbit detections; their frames are excluded from the timelapse",
+    )
     parser.add_argument("--fps", type=int, default=30, help="Output frames per second")
     parser.add_argument(
         "--min-frames",
@@ -104,19 +130,32 @@ def main() -> None:
         default=10,
         help="Skip windows with fewer than this many frames",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Rebuild every window, ignoring the up-to-date manifest cache",
+    )
     args = parser.parse_args()
 
     skip = {"latest", "last_detection"}
+    detected_frames = load_detection_frames(args.detections)
     windows: dict[datetime, list[tuple[datetime, Path]]] = {}
+    excluded = 0
 
     for path in sorted(args.frames_dir.glob("*.jpg")):
         if path.stem in skip:
+            continue
+        if path.name in detected_frames:
+            excluded += 1
             continue
         ts = parse_timestamp(path.name)
         if ts is None:
             continue
         key = window_start(ts)
         windows.setdefault(key, []).append((ts, path))
+
+    if excluded:
+        print(f"Excluded {excluded} frames labeled as rabbit detections")
 
     if not windows:
         print(f"No frames found in {args.frames_dir}", file=sys.stderr)
@@ -140,7 +179,7 @@ def main() -> None:
         complete = now >= window_dt + timedelta(days=1)
 
         manifest = read_manifest(output)
-        if output.exists() and manifest is not None:
+        if not args.force and output.exists() and manifest is not None:
             unchanged = (
                 manifest.get("frame_count") == len(frames)
                 and manifest.get("last_frame") == frames[-1].name
