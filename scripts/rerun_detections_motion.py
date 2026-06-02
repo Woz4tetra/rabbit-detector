@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import cv2
@@ -32,12 +32,16 @@ from server.motion import MotionDetector  # noqa: E402
 from server.pipeline import DEFAULT_CONFIRM_PROMPT, run_pipeline  # noqa: E402
 
 
-def parse_ts(stem: str) -> str:
+def parse_dt(stem: str) -> datetime | None:
     try:
-        dt = datetime.strptime(stem, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
-        return dt.isoformat().replace("+00:00", "Z")
+        return datetime.strptime(stem, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
     except ValueError:
-        return stem
+        return None
+
+
+def parse_ts(stem: str) -> str:
+    dt = parse_dt(stem)
+    return dt.isoformat().replace("+00:00", "Z") if dt else stem
 
 
 def load_frames(set_of_frames: Path) -> set[str]:
@@ -71,12 +75,25 @@ def main() -> None:
     ap.add_argument("--objects", nargs="+", default=["rabbit", "chipmunk", "squirrel"])
     ap.add_argument("--no-confirm", action="store_true", help="Skip the stage-2 yes/no confirmation")
     ap.add_argument("--confirm-prompt", default=DEFAULT_CONFIRM_PROMPT)
+    ap.add_argument(
+        "--since-hours",
+        type=float,
+        default=0,
+        help="Only process frames from the last N hours (0 = all)",
+    )
     ap.add_argument("--limit", type=int, default=0, help="Process at most N frames (0 = all)")
     args = ap.parse_args()
 
     frames_dir = PROJECT_ROOT / args.frames_dir
     skip = {"latest.jpg", "last_detection.jpg"}
     frames = sorted(f for f in frames_dir.glob("*.jpg") if f.name not in skip)
+
+    cutoff: datetime | None = None
+    if args.since_hours:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=args.since_hours)
+        frames = [f for f in frames if (dt := parse_dt(f.stem)) and dt >= cutoff]
+        print(f"Window: frames since {cutoff.isoformat()} ({len(frames)} frames)")
+
     if args.limit:
         frames = frames[: args.limit]
     if not frames:
@@ -84,6 +101,9 @@ def main() -> None:
         sys.exit(1)
 
     old = load_frames(PROJECT_ROOT / args.compare)
+    if cutoff is not None:
+        # Restrict the baseline to the same window so new-only/lost are meaningful.
+        old = {f for f in old if (dt := parse_dt(Path(f).stem)) and dt >= cutoff}
 
     print(
         f"{len(frames)} frames, {len(old)} existing detections. "
