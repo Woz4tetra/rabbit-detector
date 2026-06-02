@@ -23,13 +23,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
-import numpy as np
 from PIL import Image
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from server.motion import MotionDetector  # noqa: E402
+from server.pipeline import DEFAULT_CONFIRM_PROMPT, run_pipeline  # noqa: E402
 
 
 def parse_ts(stem: str) -> str:
@@ -38,23 +38,6 @@ def parse_ts(stem: str) -> str:
         return dt.isoformat().replace("+00:00", "Z")
     except ValueError:
         return stem
-
-
-def detect_count(model, image, objects) -> tuple[int, list[str]]:
-    """Return (#boxes, [labels that fired]) for the given crop."""
-    total = 0
-    hits: list[str] = []
-    for obj in objects:
-        try:
-            res = model.detect(image, obj)
-        except Exception as e:  # noqa: BLE001
-            print(f"  detect() failed for {obj!r}: {e}", file=sys.stderr)
-            continue
-        n = len(res.get("objects", []))
-        if n:
-            hits.append(obj)
-        total += n
-    return total, hits
 
 
 def load_frames(set_of_frames: Path) -> set[str]:
@@ -85,7 +68,9 @@ def main() -> None:
         help="Existing detection log to diff against",
     )
     ap.add_argument("--review-dir", default="data/rerun_review")
-    ap.add_argument("--objects", nargs="+", default=["animal"])
+    ap.add_argument("--objects", nargs="+", default=["rabbit", "chipmunk", "squirrel"])
+    ap.add_argument("--no-confirm", action="store_true", help="Skip the stage-2 yes/no confirmation")
+    ap.add_argument("--confirm-prompt", default=DEFAULT_CONFIRM_PROMPT)
     ap.add_argument("--limit", type=int, default=0, help="Process at most N frames (0 = all)")
     args = ap.parse_args()
 
@@ -116,7 +101,6 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     detected: list[str] = []
-    detect_calls = 0
 
     with open(out_path, "w") as out:
         for i, fp in enumerate(frames):
@@ -124,35 +108,23 @@ def main() -> None:
             if bgr is None:
                 continue
             image = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
-            res = motion.update(np.ascontiguousarray(bgr))
 
-            present = False
-            regions_hit: list[list[int]] = []
-            objs_hit: list[str] = []
+            outcome = run_pipeline(
+                model,
+                image,
+                motion=motion,
+                objects=args.objects,
+                confirm_enabled=not args.no_confirm,
+                confirm_prompt=args.confirm_prompt,
+            )
 
-            if res.warming:
-                n, hits = detect_count(model, image, args.objects)
-                detect_calls += 1
-                if n:
-                    present = True
-                    objs_hit += hits
-                    regions_hit.append([0, 0, image.width, image.height])
-            else:
-                for (x, y, w, h) in res.regions:
-                    n, hits = detect_count(model, image.crop((x, y, x + w, y + h)), args.objects)
-                    detect_calls += 1
-                    if n:
-                        present = True
-                        objs_hit += hits
-                        regions_hit.append([x, y, w, h])
-
-            if present:
+            if outcome.present:
                 rec = {
                     "timestamp": parse_ts(fp.stem),
                     "rabbit_present": True,
                     "confidence": 1.0,
-                    "objects": sorted(set(objs_hit)),
-                    "regions": regions_hit,
+                    "objects": outcome.objects,
+                    "regions": outcome.regions,
                     "frame": fp.name,
                 }
                 out.write(json.dumps(rec) + "\n")
@@ -161,11 +133,11 @@ def main() -> None:
 
                 if fp.name not in old:
                     annotated = bgr.copy()
-                    for (x, y, w, h) in regions_hit:
+                    for (x, y, w, h) in outcome.regions:
                         cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 0, 255), 2)
                     cv2.putText(
                         annotated,
-                        ",".join(sorted(set(objs_hit))),
+                        ",".join(outcome.objects),
                         (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         1.0,
@@ -176,8 +148,7 @@ def main() -> None:
 
             if (i + 1) % 500 == 0:
                 print(
-                    f"  [{i + 1}/{len(frames)}] {len(detected)} detections, "
-                    f"{detect_calls} detect() calls",
+                    f"  [{i + 1}/{len(frames)}] {len(detected)} detections",
                     flush=True,
                 )
 

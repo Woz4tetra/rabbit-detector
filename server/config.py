@@ -16,9 +16,18 @@ class ServerSettings:
     model_revision: str = "2025-01-09"
     device: str = "cuda:0"
     detection_prompt: str = "Is there a rabbit in this image? Reply with only 'yes' or 'no'."
-    # Objects passed to Moondream's detect() head. Open-vocabulary, so "animal"
-    # catches rabbits, chipmunks, squirrels, birds, cats, etc. in one pass.
-    detection_objects: list[str] = field(default_factory=lambda: ["animal"])
+    # Objects passed to Moondream's detect() head (open-vocabulary). Concrete
+    # species hallucinate far less than the generic "animal" on leaves/furniture.
+    detection_objects: list[str] = field(
+        default_factory=lambda: ["rabbit", "chipmunk", "squirrel"]
+    )
+    # Stage-2 confirmation: after detect() localizes a candidate, a yes/no query()
+    # on the region crop rejects false positives (leaves, shadows, furniture).
+    confirm_enabled: bool = True
+    confirm_prompt: str = (
+        "Does this image clearly show a live animal such as a rabbit, chipmunk, "
+        "squirrel, or bird? Answer with only 'yes' or 'no'."
+    )
     # Motion gating: only run detect() on frame regions that changed against a
     # rolling background. Dramatically improves recall on small, distant subjects.
     motion_enabled: bool = True
@@ -54,7 +63,11 @@ def load_server_settings(path: Path | None = None):
             "detection_prompt",
             "Is there a rabbit in this image? Reply with only 'yes' or 'no'.",
         ),
-        detection_objects=list(sa.get("detection_objects", ["animal"])),
+        detection_objects=list(
+            sa.get("detection_objects", ["rabbit", "chipmunk", "squirrel"])
+        ),
+        confirm_enabled=bool(sa.get("confirm_enabled", True)),
+        confirm_prompt=sa.get("confirm_prompt", ServerSettings.confirm_prompt),
         motion_enabled=bool(sa.get("motion_enabled", True)),
         motion_threshold=int(sa.get("motion_threshold", 25)),
         motion_min_area_frac=float(sa.get("motion_min_area_frac", 0.0002)),

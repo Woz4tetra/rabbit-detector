@@ -82,9 +82,13 @@ server_app:
   device: "cuda:0"
   # model_id and model_revision are set in server/config.py defaults
   detection_prompt: "Is there a rabbit in this image? Reply with only 'yes' or 'no'."
-  # Objects passed to Moondream's detect() head (open-vocabulary). "animal"
-  # catches rabbits, chipmunks, squirrels, birds, etc. in one pass.
-  detection_objects: ["animal"]
+  # Objects passed to Moondream's detect() head (open-vocabulary). Concrete
+  # species hallucinate far less than generic "animal" on leaves/furniture.
+  detection_objects: ["rabbit", "chipmunk", "squirrel"]
+  # Stage-2 confirmation: after detect() localizes a candidate, a yes/no query()
+  # on the region crop rejects false positives (leaves, shadows, furniture).
+  confirm_enabled: true
+  confirm_prompt: "Does this image clearly show a live animal such as a rabbit, chipmunk, squirrel, or bird? Answer with only 'yes' or 'no'."
   # Motion gating: run detect() only on frame regions that changed against a
   # rolling background. Big recall boost for small, distant subjects. A wind-
   # moved plant costs one extra inference, not a false alert (detect() rejects it).
