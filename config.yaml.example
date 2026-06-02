@@ -82,6 +82,20 @@ server_app:
   device: "cuda:0"
   # model_id and model_revision are set in server/config.py defaults
   detection_prompt: "Is there a rabbit in this image? Reply with only 'yes' or 'no'."
+  # Objects passed to Moondream's detect() head (open-vocabulary). "animal"
+  # catches rabbits, chipmunks, squirrels, birds, etc. in one pass.
+  detection_objects: ["animal"]
+  # Motion gating: run detect() only on frame regions that changed against a
+  # rolling background. Big recall boost for small, distant subjects. A wind-
+  # moved plant costs one extra inference, not a false alert (detect() rejects it).
+  motion_enabled: true
+  motion_threshold: 25          # per-pixel grayscale diff to count as changed
+  motion_min_area_frac: 0.0002  # min blob area as a fraction of the frame
+  motion_bg_alpha: 0.05         # background adapt rate (lower = slower to forget)
+  motion_pad_frac: 0.6          # pad each crop by this fraction of the blob size
+  motion_min_crop_px: 160       # floor on crop size so the model gets context
+  motion_warmup_frames: 3       # full-frame detect() until the background seeds
+  motion_max_regions: 6         # cap crops per frame to bound inference cost
   frames_dir: data/server-frames
   max_frames: 5000
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -16,6 +16,19 @@ class ServerSettings:
     model_revision: str = "2025-01-09"
     device: str = "cuda:0"
     detection_prompt: str = "Is there a rabbit in this image? Reply with only 'yes' or 'no'."
+    # Objects passed to Moondream's detect() head. Open-vocabulary, so "animal"
+    # catches rabbits, chipmunks, squirrels, birds, cats, etc. in one pass.
+    detection_objects: list[str] = field(default_factory=lambda: ["animal"])
+    # Motion gating: only run detect() on frame regions that changed against a
+    # rolling background. Dramatically improves recall on small, distant subjects.
+    motion_enabled: bool = True
+    motion_threshold: int = 25
+    motion_min_area_frac: float = 0.0002
+    motion_bg_alpha: float = 0.05
+    motion_pad_frac: float = 0.6
+    motion_min_crop_px: int = 160
+    motion_warmup_frames: int = 3
+    motion_max_regions: int = 6
     frames_dir: str = "data/server-frames"
     max_frames: int = 5000
 
@@ -41,6 +54,15 @@ def load_server_settings(path: Path | None = None):
             "detection_prompt",
             "Is there a rabbit in this image? Reply with only 'yes' or 'no'.",
         ),
+        detection_objects=list(sa.get("detection_objects", ["animal"])),
+        motion_enabled=bool(sa.get("motion_enabled", True)),
+        motion_threshold=int(sa.get("motion_threshold", 25)),
+        motion_min_area_frac=float(sa.get("motion_min_area_frac", 0.0002)),
+        motion_bg_alpha=float(sa.get("motion_bg_alpha", 0.05)),
+        motion_pad_frac=float(sa.get("motion_pad_frac", 0.6)),
+        motion_min_crop_px=int(sa.get("motion_min_crop_px", 160)),
+        motion_warmup_frames=int(sa.get("motion_warmup_frames", 3)),
+        motion_max_regions=int(sa.get("motion_max_regions", 6)),
         frames_dir=sa.get("frames_dir", "data/server-frames"),
         max_frames=int(sa.get("max_frames", 5000)),
     )

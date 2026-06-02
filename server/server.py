@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from zoneinfo import ZoneInfo
 
 from .config import PROJECT_ROOT, ServerSettings, load_server_settings
+from .motion import MotionDetector
 
 _EASTERN = ZoneInfo("America/New_York")
 
@@ -48,14 +49,26 @@ _rabbit_detections: list[dict] = []              # all rabbit detections, persis
 _detections_log_path: Path | None = None
 _latest_frame_path: Path | None = None
 _last_detection_frame_path: Path | None = None
+_motion: MotionDetector | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _model, _tokenizer, _settings, _notifier, _latest_frame_path, _last_detection_frame_path
-    global _detections_log_path, _rabbit_detections
+    global _detections_log_path, _rabbit_detections, _motion
 
     _settings, email_cfg = load_server_settings()
+
+    if _settings.motion_enabled:
+        _motion = MotionDetector(
+            threshold=_settings.motion_threshold,
+            min_area_frac=_settings.motion_min_area_frac,
+            bg_alpha=_settings.motion_bg_alpha,
+            pad_frac=_settings.motion_pad_frac,
+            min_crop_px=_settings.motion_min_crop_px,
+            warmup_frames=_settings.motion_warmup_frames,
+            max_regions=_settings.motion_max_regions,
+        )
 
     frames_dir = PROJECT_ROOT / _settings.frames_dir
     frames_dir.mkdir(parents=True, exist_ok=True)
@@ -102,19 +115,64 @@ class DetectionResponse(BaseModel):
     raw_response: str
 
 
+def _detect_count(image: Image.Image) -> int:
+    """Return the number of target objects Moondream localizes in the image."""
+    total = 0
+    for obj in _settings.detection_objects:
+        try:
+            result = _model.detect(image, obj)
+        except Exception:
+            logger.exception("detect() failed for %r", obj)
+            continue
+        total += len(result.get("objects", []))
+    return total
+
+
 def _run_inference(image_bytes: bytes) -> DetectionResponse:
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    enc = _model.encode_image(image)
-    raw: str = _model.query(enc, _settings.detection_prompt)["answer"]
-    cleaned = raw.strip().lower().rstrip(".,!? \t\n")
-    if cleaned.startswith("yes"):
-        rabbit, confidence = True, 1.0
-    elif cleaned.startswith("no"):
-        rabbit, confidence = False, 0.0
-    else:
-        logger.warning("Ambiguous Moondream2 response: %r", raw)
-        rabbit, confidence = False, 0.0
-    return DetectionResponse(rabbit=rabbit, confidence=confidence, raw_response=raw)
+
+    # No motion gating: run detect() on the whole frame.
+    if _motion is None:
+        count = _detect_count(image)
+        return DetectionResponse(
+            rabbit=count > 0,
+            confidence=1.0 if count > 0 else 0.0,
+            raw_response=f"detect: {count} object(s) (full frame)",
+        )
+
+    frame_bgr = np.ascontiguousarray(np.array(image)[:, :, ::-1])
+    motion = _motion.update(frame_bgr)
+
+    # While the background model seeds, fall back to whole-frame detection so we
+    # don't silently miss anything during warmup.
+    if motion.warming:
+        count = _detect_count(image)
+        return DetectionResponse(
+            rabbit=count > 0,
+            confidence=1.0 if count > 0 else 0.0,
+            raw_response=f"detect: {count} object(s) (warmup, full frame)",
+        )
+
+    if not motion.regions:
+        return DetectionResponse(rabbit=False, confidence=0.0, raw_response="no motion")
+
+    total = 0
+    hit_region: tuple[int, int, int, int] | None = None
+    for (x, y, w, h) in motion.regions:
+        count = _detect_count(image.crop((x, y, x + w, y + h)))
+        if count:
+            total += count
+            if hit_region is None:
+                hit_region = (x, y, w, h)
+
+    if total > 0:
+        raw = f"animal in motion region {hit_region}: {total} object(s) across {len(motion.regions)} region(s)"
+        return DetectionResponse(rabbit=True, confidence=1.0, raw_response=raw)
+    return DetectionResponse(
+        rabbit=False,
+        confidence=0.0,
+        raw_response=f"motion only, no animal in {len(motion.regions)} region(s)",
+    )
 
 
 def _save_frame(image_bytes: bytes, is_detection: bool) -> str:
