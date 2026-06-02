@@ -28,12 +28,16 @@ class DetectionOutcome:
     detail: str = ""
 
 
-def _detect_labels(model, crop: Image.Image, objects: list[str]) -> list[str]:
-    """Return the target labels detect() localizes at least one box for."""
+def _detect_labels(model, enc, objects: list[str]) -> list[str]:
+    """Return the target labels detect() localizes at least one box for.
+
+    Takes a pre-encoded image so the same crop is encoded once and reused across
+    every species, instead of re-encoding per detect() call.
+    """
     labels: list[str] = []
     for obj in objects:
         try:
-            res = model.detect(crop, obj)
+            res = model.detect(enc, obj)
         except Exception:  # noqa: BLE001 — a bad label shouldn't kill the frame
             continue
         if res.get("objects"):
@@ -41,8 +45,7 @@ def _detect_labels(model, crop: Image.Image, objects: list[str]) -> list[str]:
     return labels
 
 
-def _confirm(model, crop: Image.Image, prompt: str) -> bool:
-    enc = model.encode_image(crop)
+def _confirm(model, enc, prompt: str) -> bool:
     ans = str(model.query(enc, prompt)["answer"]).strip().lower()
     return ans.startswith("yes")
 
@@ -73,11 +76,12 @@ def run_pipeline(
     hit_regions: list[list[int]] = []
 
     for (x, y, w, h) in regions:
-        crop = image.crop((x, y, x + w, y + h))
-        labels = _detect_labels(model, crop, objects)
+        # Encode the crop once; detect() and query() both accept the EncodedImage.
+        enc = model.encode_image(image.crop((x, y, x + w, y + h)))
+        labels = _detect_labels(model, enc, objects)
         if not labels:
             continue
-        if confirm_enabled and not _confirm(model, crop, confirm_prompt):
+        if confirm_enabled and not _confirm(model, enc, confirm_prompt):
             continue
         hit_objs += labels
         hit_regions.append([x, y, w, h])
