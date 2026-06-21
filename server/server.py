@@ -46,6 +46,7 @@ _lock = asyncio.Lock()
 _settings: ServerSettings | None = None
 _notifier = None
 _recent_frames: Deque[dict] = deque(maxlen=5)   # last few frames for status bar
+_frame_files: Deque[str] = deque()               # all saved frame names, oldest-first, for O(1) pruning
 _rabbit_detections: list[dict] = []              # all rabbit detections, persisted to disk
 _detections_log_path: Path | None = None
 _latest_frame_path: Path | None = None
@@ -56,7 +57,7 @@ _motion: MotionDetector | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _model, _tokenizer, _settings, _notifier, _latest_frame_path, _last_detection_frame_path
-    global _detections_log_path, _rabbit_detections, _motion
+    global _detections_log_path, _rabbit_detections, _motion, _frame_files
 
     _settings, email_cfg = load_server_settings()
 
@@ -78,6 +79,14 @@ async def lifespan(app: FastAPI):
     detection = frames_dir / "last_detection.jpg"
     _latest_frame_path = latest if latest.exists() else None
     _last_detection_frame_path = detection if detection.exists() else None
+
+    # Scan the frames dir once at startup so pruning never has to glob it on the
+    # request path. Names are UTC timestamps, so lexical sort == chronological.
+    skip = {"latest.jpg", "last_detection.jpg"}
+    _frame_files = deque(
+        sorted(p.name for p in frames_dir.glob("*.jpg") if p.name not in skip)
+    )
+    logger.info("Tracking %d existing frames in %s", len(_frame_files), frames_dir)
 
     log_path = PROJECT_ROOT / "data" / "detections.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,6 +149,7 @@ def _save_frame(image_bytes: bytes, is_detection: bool) -> str:
     ts = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     name = f"{ts}.jpg"
     (frames_dir / name).write_bytes(image_bytes)
+    _frame_files.append(name)
 
     latest = frames_dir / "latest.jpg"
     latest.write_bytes(image_bytes)
@@ -155,12 +165,14 @@ def _save_frame(image_bytes: bytes, is_detection: bool) -> str:
 
 
 def _prune_frames(frames_dir: Path) -> None:
+    # O(1) per call: pop the oldest tracked names off the deque instead of
+    # globbing the whole directory on every request. max_frames <= 0 disables
+    # pruning entirely (keep all frames, e.g. for training).
     if _settings.max_frames <= 0:
         return
-    skip = {"latest.jpg", "last_detection.jpg"}
-    frames = sorted(f for f in frames_dir.glob("*.jpg") if f.name not in skip)
-    for old in frames[: -_settings.max_frames]:
-        old.unlink(missing_ok=True)
+    while len(_frame_files) > _settings.max_frames:
+        old = _frame_files.popleft()
+        (frames_dir / old).unlink(missing_ok=True)
 
 
 def _send_email(image_bytes: bytes, timestamp: str, raw_response: str) -> None:
